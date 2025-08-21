@@ -9,7 +9,11 @@ in Git repositories. It can:
 - Identify the scope and impact of changes
 """
 
+import sys
+
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
+
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from git import Repo, Diff
@@ -297,7 +301,6 @@ class GitChangeDetector:
             total_commits = len(list(self.repo.iter_commits()))
 
             # Get recent commits (last 30 days)
-            from datetime import datetime, timedelta, timezone
 
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)
             recent_commits = len(
@@ -616,7 +619,6 @@ def main():
         - Repository must have at least one commit
         - Python packages: gitpython, loguru
     """
-    import sys
 
     # Check if repository path is provided as command line argument
     if len(sys.argv) > 1:
