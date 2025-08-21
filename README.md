@@ -1,1 +1,1 @@
-# personal-repository-template
+# pr-review-assistant
