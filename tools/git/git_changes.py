@@ -297,14 +297,15 @@ class GitChangeDetector:
             total_commits = len(list(self.repo.iter_commits()))
 
             # Get recent commits (last 30 days)
-            from datetime import datetime, timedelta
+            from datetime import datetime, timedelta, timezone
 
-            cutoff_date = datetime.now() - timedelta(days=30)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)
             recent_commits = len(
                 [
                     commit
                     for commit in self.repo.iter_commits()
-                    if commit.authored_datetime > cutoff_date
+                    if commit.authored_datetime.replace(tzinfo=timezone.utc)
+                    > cutoff_date
                 ]
             )
 
