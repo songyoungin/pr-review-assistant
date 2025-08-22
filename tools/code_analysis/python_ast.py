@@ -10,11 +10,12 @@ Abstract Syntax Trees (AST). It can:
 - Detect potential code smells and issues
 """
 
-import sys
 import ast
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Union, Tuple, cast
+import sys
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, cast
+
 from loguru import logger
 
 
@@ -25,9 +26,9 @@ class FunctionInfo:
     name: str
     line_number: int
     end_line: int
-    arguments: List[str]
-    decorators: List[str]
-    docstring: Optional[str]
+    arguments: list[str]
+    decorators: list[str]
+    docstring: str | None
     complexity: int
     nested_level: int
     has_return: bool
@@ -41,11 +42,11 @@ class ClassInfo:
     name: str
     line_number: int
     end_line: int
-    bases: List[str]
-    decorators: List[str]
-    docstring: Optional[str]
-    methods: List[FunctionInfo]
-    class_variables: List[str]
+    bases: list[str]
+    decorators: list[str]
+    docstring: str | None
+    methods: list[FunctionInfo]
+    class_variables: list[str]
     nested_level: int
 
 
@@ -54,8 +55,8 @@ class ImportInfo:
     """Represents information about Python imports."""
 
     module: str
-    names: List[str]
-    alias: Optional[str]
+    names: list[str]
+    alias: str | None
     line_number: int
     import_type: str  # 'import', 'from', 'from_as'
 
@@ -75,8 +76,8 @@ class CodeMetrics:
     average_complexity: float
     max_complexity: int
     max_nesting: int
-    magic_numbers: List[Tuple[int, str]]
-    hardcoded_strings: List[Tuple[int, str]]
+    magic_numbers: list[tuple[int, str]]
+    hardcoded_strings: list[tuple[int, str]]
 
 
 class ASTNodeVisitor(ast.NodeVisitor):
@@ -92,12 +93,12 @@ class ASTNodeVisitor(ast.NodeVisitor):
 
     def __init__(self) -> None:
         """Initialize the AST node visitor."""
-        self.functions: List[FunctionInfo] = []
-        self.classes: List[ClassInfo] = []
-        self.imports: List[ImportInfo] = []
+        self.functions: list[FunctionInfo] = []
+        self.classes: list[ClassInfo] = []
+        self.imports: list[ImportInfo] = []
         self.current_nesting = 0
-        self.magic_numbers: List[Tuple[int, str]] = []
-        self.hardcoded_strings: List[Tuple[int, str]] = []
+        self.magic_numbers: list[tuple[int, str]] = []
+        self.hardcoded_strings: list[tuple[int, str]] = []
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """Visit function definition nodes."""
@@ -105,7 +106,7 @@ class ASTNodeVisitor(ast.NodeVisitor):
         complexity = 1  # Base complexity
 
         for child in ast.walk(node):
-            if isinstance(child, (ast.If, ast.While, ast.For, ast.ExceptHandler)):
+            if isinstance(child, ast.If | ast.While | ast.For | ast.ExceptHandler):
                 complexity += 1
             elif isinstance(child, ast.BoolOp):
                 complexity += len(child.values) - 1
@@ -114,7 +115,7 @@ class ASTNodeVisitor(ast.NodeVisitor):
         arguments = [arg.arg for arg in node.args.args]
 
         # Extract decorators
-        decorators: List[str] = []
+        decorators: list[str] = []
         for decorator in node.decorator_list:
             if isinstance(decorator, ast.Name):
                 decorators.append(decorator.id)
@@ -160,7 +161,7 @@ class ASTNodeVisitor(ast.NodeVisitor):
         complexity = 1  # Base complexity
 
         for child in ast.walk(node):
-            if isinstance(child, (ast.If, ast.While, ast.For, ast.ExceptHandler)):
+            if isinstance(child, ast.If | ast.While | ast.For | ast.ExceptHandler):
                 complexity += 1
             elif isinstance(child, ast.BoolOp):
                 complexity += len(child.values) - 1
@@ -212,7 +213,7 @@ class ASTNodeVisitor(ast.NodeVisitor):
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         """Visit class definition nodes."""
         # Extract base classes
-        bases: List[str] = []
+        bases: list[str] = []
         for base in node.bases:
             if isinstance(base, ast.Name):
                 bases.append(base.id)
@@ -223,7 +224,7 @@ class ASTNodeVisitor(ast.NodeVisitor):
                     bases.append(f"<complex>.{base.attr}")
 
         # Extract decorators
-        decorators: List[str] = []
+        decorators: list[str] = []
         for decorator in node.decorator_list:
             if isinstance(decorator, ast.Name):
                 decorators.append(decorator.id)
@@ -244,7 +245,7 @@ class ASTNodeVisitor(ast.NodeVisitor):
             docstring = node.body[0].value.value
 
         # Extract class variables
-        class_variables: List[str] = []
+        class_variables: list[str] = []
         for item in node.body:
             if isinstance(item, ast.Assign):
                 for target in item.targets:
@@ -316,7 +317,7 @@ class ASTNodeVisitor(ast.NodeVisitor):
 
     def visit_Constant(self, node: ast.Constant) -> None:
         """Visit constant nodes to detect magic numbers and hardcoded strings."""
-        if isinstance(node.value, (int, float)) and node.value not in (0, 1, -1):
+        if isinstance(node.value, int | float) and node.value not in (0, 1, -1):
             self.magic_numbers.append((node.lineno, str(node.value)))
         elif isinstance(node.value, str) and len(node.value) > 20:
             # Consider long strings as potentially hardcoded
@@ -339,11 +340,11 @@ class PythonASTAnalyzer:
     def __init__(self) -> None:
         """Initialize the Python AST Analyzer."""
         self.visitor = ASTNodeVisitor()
-        self.ast_tree: Optional[ast.AST] = None
+        self.ast_tree: ast.AST | None = None
         self.source_code: str = ""
-        self.file_path: Optional[Path] = None
+        self.file_path: Path | None = None
 
-    def analyze_file(self, file_path: Union[str, Path]) -> Dict[str, Any]:
+    def analyze_file(self, file_path: str | Path) -> dict[str, Any]:
         """
         Analyze a Python file and return comprehensive analysis results.
 
@@ -371,16 +372,16 @@ class PythonASTAnalyzer:
 
         # Read and parse the file
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 self.source_code = f.read()
         except UnicodeDecodeError:
             # Try with different encoding
-            with open(file_path, "r", encoding="latin-1") as f:
+            with open(file_path, encoding="latin-1") as f:
                 self.source_code = f.read()
 
         return self.analyze_source(self.source_code)
 
-    def analyze_source(self, source_code: str) -> Dict[str, Any]:
+    def analyze_source(self, source_code: str) -> dict[str, Any]:
         """
         Analyze Python source code and return comprehensive analysis results.
 
@@ -505,9 +506,9 @@ class PythonASTAnalyzer:
             hardcoded_strings=self.visitor.hardcoded_strings,
         )
 
-    def _detect_code_smells(self) -> Dict[str, List[Dict[str, Any]]]:
+    def _detect_code_smells(self) -> dict[str, list[dict[str, Any]]]:
         """Detect potential code smells and issues."""
-        smells: Dict[str, List[Dict[str, Any]]] = {
+        smells: dict[str, list[dict[str, Any]]] = {
             "high_complexity": [],
             "long_functions": [],
             "deep_nesting": [],
@@ -587,7 +588,7 @@ class PythonASTAnalyzer:
 
         return smells
 
-    def _generate_summary(self) -> Dict[str, Any]:
+    def _generate_summary(self) -> dict[str, Any]:
         """Generate a summary of the analysis."""
         metrics = self._calculate_metrics()
 
@@ -637,7 +638,7 @@ class PythonASTAnalyzer:
         else:
             return "Very Poor - Major refactoring required"
 
-    def _get_recommendations(self) -> List[str]:
+    def _get_recommendations(self) -> list[str]:
         """Generate recommendations for code improvement."""
         recommendations = []
         metrics = self._calculate_metrics()
@@ -669,7 +670,7 @@ class PythonASTAnalyzer:
 
         return recommendations
 
-    def _function_to_dict(self, func: FunctionInfo) -> Dict[str, Any]:
+    def _function_to_dict(self, func: FunctionInfo) -> dict[str, Any]:
         """Convert FunctionInfo to dictionary."""
         return {
             "name": func.name,
@@ -684,7 +685,7 @@ class PythonASTAnalyzer:
             "has_yield": func.has_yield,
         }
 
-    def _class_to_dict(self, cls: ClassInfo) -> Dict[str, Any]:
+    def _class_to_dict(self, cls: ClassInfo) -> dict[str, Any]:
         """Convert ClassInfo to dictionary."""
         return {
             "name": cls.name,
@@ -698,7 +699,7 @@ class PythonASTAnalyzer:
             "nested_level": cls.nested_level,
         }
 
-    def _import_to_dict(self, imp: ImportInfo) -> Dict[str, Any]:
+    def _import_to_dict(self, imp: ImportInfo) -> dict[str, Any]:
         """Convert ImportInfo to dictionary."""
         return {
             "module": imp.module,
@@ -714,7 +715,7 @@ class PythonASTAnalyzer:
 
         return datetime.now().isoformat()
 
-    def analyze_directory(self, directory_path: Union[str, Path]) -> Dict[str, Any]:
+    def analyze_directory(self, directory_path: str | Path) -> dict[str, Any]:
         """
         Analyze all Python files in a directory.
 
@@ -751,7 +752,7 @@ class PythonASTAnalyzer:
         for file_path in python_files:
             try:
                 file_analysis = self.analyze_file(file_path)
-                cast(List[Dict[str, Any]], results["files"]).append(
+                cast(list[dict[str, Any]], results["files"]).append(
                     {"file_path": str(file_path), "analysis": file_analysis}
                 )
 
@@ -772,7 +773,7 @@ class PythonASTAnalyzer:
 
             except Exception as e:
                 logger.error(f"Failed to analyze file {file_path}: {e}")
-                cast(List[Dict[str, Any]], results["files"]).append(
+                cast(list[dict[str, Any]], results["files"]).append(
                     {"file_path": str(file_path), "error": str(e)}
                 )
 
@@ -793,7 +794,7 @@ class PythonASTAnalyzer:
         return results
 
 
-def main():
+def main() -> None:
     """
     Example usage of PythonASTAnalyzer class.
 
@@ -841,20 +842,20 @@ def main():
         logger.info(f"Initializing Python AST Analyzer for: {target_path}")
         analyzer = PythonASTAnalyzer()
 
-        target_path = Path(target_path)
+        target_path_obj = Path(target_path)
 
-        if target_path.is_file() and target_path.suffix == ".py":
+        if target_path_obj.is_file() and target_path_obj.suffix == ".py":
             # Analyze single Python file
-            logger.info(f"Analyzing Python file: {target_path}")
-            results = analyzer.analyze_file(target_path)
+            logger.info(f"Analyzing Python file: {target_path_obj}")
+            results = analyzer.analyze_file(target_path_obj)
 
             # Display results
             _display_file_analysis(results)
 
-        elif target_path.is_dir():
+        elif target_path_obj.is_dir():
             # Analyze directory
-            logger.info(f"Analyzing Python files in directory: {target_path}")
-            results = analyzer.analyze_directory(target_path)
+            logger.info(f"Analyzing Python files in directory: {target_path_obj}")
+            results = analyzer.analyze_directory(target_path_obj)
 
             # Display results
             _display_directory_analysis(results)
@@ -870,7 +871,7 @@ def main():
         sys.exit(1)
 
 
-def _display_file_analysis(results: Dict[str, Any]) -> None:
+def _display_file_analysis(results: dict[str, Any]) -> None:
     """Display analysis results for a single file."""
     logger.info("\n" + "=" * 60)
     logger.info("PYTHON AST ANALYSIS RESULTS")
@@ -931,7 +932,7 @@ def _display_file_analysis(results: Dict[str, Any]) -> None:
             logger.info(f"  {i}. {rec}")
 
 
-def _display_directory_analysis(results: Dict[str, Any]) -> None:
+def _display_directory_analysis(results: dict[str, Any]) -> None:
     """Display analysis results for a directory."""
     logger.info("\n" + "=" * 60)
     logger.info("DIRECTORY ANALYSIS RESULTS")

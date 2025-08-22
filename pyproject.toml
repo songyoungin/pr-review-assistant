@@ -1,9 +1,24 @@
 [project]
-name = "personal-repository-template"
+name = "pr-review-assistant"
 version = "0.1.0"
-description = "Add your description here"
+description = "PR 리뷰를 위한 지능형 어시스턴트 도구"
 readme = "README.md"
 requires-python = ">=3.12"
+authors = [
+    {name = "PR Review Assistant Team"}
+]
+license = {text = "MIT"}
+keywords = ["pr-review", "code-analysis", "ai-assistant", "git"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "gitpython>=3.1.45",
     "langgraph>=0.6.5",
@@ -15,4 +30,125 @@ dependencies = [
 dev = [
     "pre-commit>=4.2.0",
     "pytest>=8.4.1",
+    "pytest-cov>=5.0.0",
+    "types-requests",
+    "types-PyYAML",
+]
+
+# Note: dev dependencies are managed through [dependency-groups]
+
+[project.urls]
+Homepage = "https://github.com/your-org/pr-review-assistant"
+Repository = "https://github.com/your-org/pr-review-assistant"
+Documentation = "https://pr-review-assistant.readthedocs.io"
+Issues = "https://github.com/your-org/pr-review-assistant/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agents", "tools", "graph"]
+
+# Note: dev dependencies are managed through [project.optional-dependencies]
+
+# Note: pre-commit configuration is in .pre-commit-config.yaml
+# This file contains detailed tool configurations referenced by pre-commit hooks
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+show_column_numbers = true
+show_error_context = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = [
+    "git.*",
+    "langgraph.*",
+    "loguru.*",
+    "python-dotenv.*",
+]
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long, handled by ruff format
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=.",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+
+[tool.coverage.run]
+source = ["agents", "tools", "graph"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/.venv/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
 ]

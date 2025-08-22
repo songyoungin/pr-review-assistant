@@ -10,11 +10,12 @@ and detecting mismatches between implementation and docs. It can:
 - Generate comprehensive documentation gap reports
 """
 
-import re
 import ast
-from pathlib import Path
-from typing import Dict, List, Any, Optional
+import re
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
 from loguru import logger
 
 
@@ -25,11 +26,11 @@ class DocumentationGap:
     gap_type: str  # 'missing_doc', 'outdated_doc', 'api_mismatch', 'example_mismatch'
     severity: str  # 'high', 'medium', 'low'
     file_path: str
-    line_number: Optional[int]
+    line_number: int | None
     description: str
     suggestion: str
-    code_context: Optional[str] = None
-    doc_context: Optional[str] = None
+    code_context: str | None = None
+    doc_context: str | None = None
 
 
 @dataclass
@@ -41,10 +42,10 @@ class APISpecification:
     function_name: str
     file_path: str
     line_number: int
-    parameters: List[str]
-    return_type: Optional[str]
-    docstring: Optional[str]
-    decorators: List[str]
+    parameters: list[str]
+    return_type: str | None
+    docstring: str | None
+    decorators: list[str]
 
 
 @dataclass
@@ -73,9 +74,9 @@ class CodeDocMatcher:
 
     def __init__(self) -> None:
         """Initialize the Code Documentation Matcher."""
-        self.api_specs: List[APISpecification] = []
-        self.doc_sections: List[DocumentationSection] = []
-        self.gaps: List[DocumentationGap] = []
+        self.api_specs: list[APISpecification] = []
+        self.doc_sections: list[DocumentationSection] = []
+        self.gaps: list[DocumentationGap] = []
 
         # Common patterns for API detection
         self.api_patterns = {
@@ -94,7 +95,7 @@ class CodeDocMatcher:
             ],
         }
 
-    def analyze_project(self, project_path: str) -> Dict[str, Any]:
+    def analyze_project(self, project_path: str) -> dict[str, Any]:
         """
         Analyze the entire project for documentation gaps.
 
@@ -129,7 +130,7 @@ class CodeDocMatcher:
 
         for file_path in python_files:
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     content = f.read()
 
                 # Parse AST for function definitions
@@ -149,13 +150,13 @@ class CodeDocMatcher:
 
     def _extract_api_from_function(
         self, node: ast.FunctionDef, file_path: Path, content: str
-    ) -> Optional[APISpecification]:
+    ) -> APISpecification | None:
         """Extract API specification from a function definition."""
         # Check for decorators that might indicate API endpoints
         for decorator in node.decorator_list:
             if isinstance(decorator, ast.Call):
                 # Look for common API patterns
-                for framework, patterns in self.api_patterns.items():
+                for _framework, patterns in self.api_patterns.items():
                     for pattern in patterns:
                         match = re.search(
                             pattern, content[node.lineno - 1 : node.lineno + 10]
@@ -243,13 +244,13 @@ class CodeDocMatcher:
     def _parse_documentation_file(self, doc_file: Path) -> None:
         """Parse a documentation file and extract sections."""
         try:
-            with open(doc_file, "r", encoding="utf-8") as f:
+            with open(doc_file, encoding="utf-8") as f:
                 content = f.read()
 
             # Split into sections based on headers
             lines = content.split("\n")
             current_section = None
-            current_content: List[str] = []
+            current_content: list[str] = []
 
             for i, line in enumerate(lines):
                 if line.startswith("#"):
@@ -441,7 +442,7 @@ class CodeDocMatcher:
                         )
                     )
 
-    def _generate_analysis_report(self) -> Dict[str, Any]:
+    def _generate_analysis_report(self) -> dict[str, Any]:
         """Generate a comprehensive analysis report."""
         # Count gaps by severity
         high_gaps = [g for g in self.gaps if g.severity == "high"]
@@ -449,7 +450,7 @@ class CodeDocMatcher:
         low_gaps = [g for g in self.gaps if g.severity == "low"]
 
         # Count gaps by type
-        gap_types: Dict[str, int] = {}
+        gap_types: dict[str, int] = {}
         for gap in self.gaps:
             gap_types[gap.gap_type] = gap_types.get(gap.gap_type, 0) + 1
 
@@ -481,7 +482,7 @@ class CodeDocMatcher:
             "recommendations": self._generate_recommendations(),
         }
 
-    def _gap_to_dict(self, gap: DocumentationGap) -> Dict[str, Any]:
+    def _gap_to_dict(self, gap: DocumentationGap) -> dict[str, Any]:
         """Convert DocumentationGap to dictionary."""
         return {
             "gap_type": gap.gap_type,
@@ -494,7 +495,7 @@ class CodeDocMatcher:
             "doc_context": gap.doc_context,
         }
 
-    def _api_spec_to_dict(self, api: APISpecification) -> Dict[str, Any]:
+    def _api_spec_to_dict(self, api: APISpecification) -> dict[str, Any]:
         """Convert APISpecification to dictionary."""
         return {
             "endpoint": api.endpoint,
@@ -508,7 +509,7 @@ class CodeDocMatcher:
             "decorators": api.decorators,
         }
 
-    def _doc_section_to_dict(self, section: DocumentationSection) -> Dict[str, Any]:
+    def _doc_section_to_dict(self, section: DocumentationSection) -> dict[str, Any]:
         """Convert DocumentationSection to dictionary."""
         return {
             "title": section.title,
@@ -522,7 +523,7 @@ class CodeDocMatcher:
             "section_type": section.section_type,
         }
 
-    def _generate_recommendations(self) -> List[str]:
+    def _generate_recommendations(self) -> list[str]:
         """Generate actionable recommendations based on analysis."""
         recommendations = []
 
@@ -571,8 +572,8 @@ class CodeDocMatcher:
         return recommendations
 
     def match_code_with_docs(
-        self, code_changes: List[str], docs: List[str]
-    ) -> Dict[str, Any]:
+        self, code_changes: list[str], docs: list[str]
+    ) -> dict[str, Any]:
         """
         Match code changes with documentation (legacy method for backward compatibility).
 
@@ -593,7 +594,7 @@ class CodeDocMatcher:
         }
 
 
-def main():
+def main() -> None:
     """
     Example usage of CodeDocMatcher class.
 
@@ -627,7 +628,7 @@ def main():
         sys.exit(1)
 
 
-def _display_analysis_results(results: Dict[str, Any]) -> None:
+def _display_analysis_results(results: dict[str, Any]) -> None:
     """Display analysis results in a readable format."""
     summary = results["summary"]
 

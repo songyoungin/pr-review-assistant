@@ -17,6 +17,8 @@ alwaysApply: false
 - 테스트: pytest + coverage(명시적 경계/에러 케이스)
 - 의존성: uv(락 필수); optional extras로 LLM/DB/CLI 나눔
 - 예외 정책: 사용자 오류(UserError) vs 시스템 오류(SystemError) 구분, 에러코드 테이블 고정
+- 코드 품질 검사: pre-commit을 통해서만 mypy, ruff 실행 (직접 실행 금지)
+- 설정 일원화: .pre-commit-config.yaml에는 hook 목록만, 상세 설정은 pyproject.toml에
 
 # TypeScript
 - 버전: ES2022 타깃, TS 5.x

@@ -10,13 +10,12 @@ in Git repositories. It can:
 """
 
 import sys
-
-from pathlib import Path
-from datetime import datetime, timedelta, timezone
-
-from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
-from git import Repo, Diff
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
+
+from git import Diff, Repo
 from git.exc import GitCommandError, InvalidGitRepositoryError
 from loguru import logger
 
@@ -30,7 +29,7 @@ class FileChange:
     additions: int
     deletions: int
     diff_content: str
-    similarity: Optional[float] = None  # For renamed files
+    similarity: float | None = None  # For renamed files
 
 
 @dataclass
@@ -42,7 +41,7 @@ class CommitInfo:
     author_email: str
     commit_date: str
     commit_message: str
-    files_changed: List[str]
+    files_changed: list[str]
 
 
 class GitChangeDetector:
@@ -80,12 +79,12 @@ class GitChangeDetector:
         try:
             self.repo = Repo(self.repo_path)
             logger.info(f"Successfully initialized Git repository at {self.repo_path}")
-        except InvalidGitRepositoryError:
+        except InvalidGitRepositoryError as err:
             raise InvalidGitRepositoryError(
                 f"Invalid Git repository at {self.repo_path}"
-            )
+            ) from err
 
-    def get_changed_files(self, base_ref: str, head_ref: str) -> List[FileChange]:
+    def get_changed_files(self, base_ref: str, head_ref: str) -> list[FileChange]:
         """
         Get all changed files between two Git references.
 
@@ -127,7 +126,7 @@ class GitChangeDetector:
             logger.error(f"Unexpected error while getting changed files: {e}")
             raise
 
-    def _process_diff_change(self, diff: Diff) -> Optional[FileChange]:
+    def _process_diff_change(self, diff: Diff) -> FileChange | None:
         """
         Process a single diff change and convert it to a FileChange object.
 
@@ -247,7 +246,7 @@ class GitChangeDetector:
 
     def get_file_history(
         self, file_path: str, max_commits: int = 10
-    ) -> List[CommitInfo]:
+    ) -> list[CommitInfo]:
         """
         Get the commit history for a specific file.
 
@@ -286,7 +285,7 @@ class GitChangeDetector:
             logger.error(f"Failed to get file history for {file_path}: {e}")
             raise
 
-    def get_repository_stats(self) -> Dict[str, Any]:
+    def get_repository_stats(self) -> dict[str, Any]:
         """
         Get general statistics about the repository.
 
@@ -302,13 +301,12 @@ class GitChangeDetector:
 
             # Get recent commits (last 30 days)
 
-            cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)
+            cutoff_date = datetime.now(UTC) - timedelta(days=30)
             recent_commits = len(
                 [
                     commit
                     for commit in self.repo.iter_commits()
-                    if commit.authored_datetime.replace(tzinfo=timezone.utc)
-                    > cutoff_date
+                    if commit.authored_datetime.replace(tzinfo=UTC) > cutoff_date
                 ]
             )
 
@@ -334,7 +332,7 @@ class GitChangeDetector:
             logger.error(f"Failed to get repository stats: {e}")
             return {}
 
-    def get_diff_summary(self, base_ref: str, head_ref: str) -> Dict[str, Any]:
+    def get_diff_summary(self, base_ref: str, head_ref: str) -> dict[str, Any]:
         """
         Get a summary of changes between two references.
 
@@ -353,7 +351,7 @@ class GitChangeDetector:
             total_deletions = sum(change.deletions for change in changes)
 
             # Group by change type
-            change_types: Dict[str, List[str]] = {}
+            change_types: dict[str, list[str]] = {}
             for change in changes:
                 change_type = change.change_type
                 if change_type not in change_types:
@@ -361,7 +359,7 @@ class GitChangeDetector:
                 change_types[change_type].append(change.file_path)
 
             # Get file extensions
-            file_extensions: Dict[str, int] = {}
+            file_extensions: dict[str, int] = {}
             for change in changes:
                 if change.file_path:
                     ext = Path(change.file_path).suffix
@@ -384,7 +382,7 @@ class GitChangeDetector:
             logger.error(f"Failed to get diff summary: {e}")
             return {}
 
-    def get_commit_changes(self, commit_hash: str) -> List[FileChange]:
+    def get_commit_changes(self, commit_hash: str) -> list[FileChange]:
         """
         Get changes introduced by a specific commit.
 
@@ -420,7 +418,7 @@ class GitChangeDetector:
             logger.error(f"Failed to get commit changes for {commit_hash}: {e}")
             raise
 
-    def get_range_changes(self, start_commit: str, end_commit: str) -> List[FileChange]:
+    def get_range_changes(self, start_commit: str, end_commit: str) -> list[FileChange]:
         """
         Get changes between two specific commits (range analysis).
 
@@ -455,7 +453,7 @@ class GitChangeDetector:
 
     def get_branch_changes(
         self, base_branch: str, head_branch: str
-    ) -> List[FileChange]:
+    ) -> list[FileChange]:
         """
         Get all changes between two branches (alias for get_changed_files).
 
@@ -472,7 +470,7 @@ class GitChangeDetector:
         """
         return self.get_changed_files(base_branch, head_branch)
 
-    def get_commit_info_detailed(self, commit_hash: str) -> Dict[str, Any]:
+    def get_commit_info_detailed(self, commit_hash: str) -> dict[str, Any]:
         """
         Get detailed information about a commit including its changes.
 
@@ -493,7 +491,7 @@ class GitChangeDetector:
             total_deletions = sum(change.deletions for change in changes)
 
             # Group files by change type
-            change_types: Dict[str, List[str]] = {}
+            change_types: dict[str, list[str]] = {}
             for change in changes:
                 change_type = change.change_type
                 if change_type not in change_types:
@@ -516,7 +514,7 @@ class GitChangeDetector:
             logger.error(f"Failed to get detailed commit info for {commit_hash}: {e}")
             return {}
 
-    def get_branch_summary(self, base_branch: str, head_branch: str) -> Dict[str, Any]:
+    def get_branch_summary(self, base_branch: str, head_branch: str) -> dict[str, Any]:
         """
         Get comprehensive summary of changes between two branches.
 
@@ -537,11 +535,11 @@ class GitChangeDetector:
 
             # Count commits between branches
             commit_count = 0
-            for commit in self.repo.iter_commits(f"{base_branch}..{head_branch}"):
+            for _commit in self.repo.iter_commits(f"{base_branch}..{head_branch}"):
                 commit_count += 1
 
             # Get author statistics
-            authors: Dict[str, int] = {}
+            authors: dict[str, int] = {}
             for commit in self.repo.iter_commits(f"{base_branch}..{head_branch}"):
                 author = commit.author.name or "Unknown"
                 authors[author] = authors.get(author, 0) + 1
@@ -567,7 +565,7 @@ class GitChangeDetector:
             return {}
 
 
-def main():
+def main() -> None:
     """
     Example usage of GitChangeDetector class.
 

@@ -7,9 +7,9 @@ This package contains various tools for:
 - Code-documentation matching and validation
 """
 
-from .git.git_changes import GitChangeDetector
 from .code_analysis.python_ast import PythonASTAnalyzer
 from .comparison.code_doc_matcher import CodeDocMatcher
+from .git.git_changes import GitChangeDetector
 
 __all__ = [
     "GitChangeDetector",
