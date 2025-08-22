@@ -1,0 +1,17 @@
+---
+description: CI 파이프라인·리포지토리 정책: 브랜치/태그, 필수 체크, 아티팩트, 코멘트 게시.
+alwaysApply: false
+---
+
+# 브랜치 정책
+- 기본 브랜치: main
+- 보호 규칙: 품질 게이트 통과 + 리뷰 1명 이상
+
+# CI 단계(권장)
+1) 설치/캐시 복원 → 정적분석/테스트
+2) GitTool로 diff 생성 → 에이전트 실행 → final_report 산출
+3) 결과 아티팩트 업로드(JSON/MD) + PR 코멘트 게시
+4) 품질 게이트에 따른 통과/차단
+
+# 필수 체크
+- 린트/타입 통과, final_report.json 생성, quality_grade 제출

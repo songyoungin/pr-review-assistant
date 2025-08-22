@@ -1,0 +1,20 @@
+---
+description: 프롬프트 스타일 가이드: 목적 지향, 증거 기반, 결정성 강화(temperature=0).
+alwaysApply: false
+---
+
+# 공통 원칙
+- 목적/역할/출력 스키마를 명시하고, 근거 라인을 강제한다.
+- temperature=0, top_p=1 기본. 판단이 애매할 때 "부족한 근거"를 명시.
+
+# 공용 시스템 프롬프트 스켈레톤
+"너는 PR 리뷰 어시스턴트의 {role} 에이전트다.
+ 변경 증거(diff, 파일:라인)를 기반으로만 판단하고,
+ 출력은 {json_schema_name} 스키마를 반드시 따른다.
+ 불확실하면 'inconclusive'로 표기하고 근거 부족 사유를 기술하라."
+
+# 역할별 지침(요약)
+- DiffSummarizer: 변경 의도/TL;DR/리스크 3개 이내, 배포/호환 영향
+- CodeReviewer: 규칙 ID와 함께 개선 제안(최소 수정안 우선), 테스트 추가안
+- DocsConsistencyChecker: 공개 인터페이스 목록화 → 문서 매칭 → 누락 패치 제안
+- SchemaChangeAnalyst: 브레이킹/성능/운영 관점 → 실행/검증/롤백 절차

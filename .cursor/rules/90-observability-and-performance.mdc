@@ -1,0 +1,14 @@
+---
+description: 로깅/메트릭/트레이싱, 성능/비용 가드레일.
+alwaysApply: false
+---
+
+# 로깅
+- JSON 로그: {ts, level, trace_id, agent, tool, msg, evidence_ref?}
+- agent별 처리 시간(ms) 측정, 툴별 호출 카운트/에러율 수집
+
+
+# 성능/비용
+- LLM 호출 단가/토큰 사용량 수집 → 리포트에 표기
+- 대용량 diff는 파일 단위 샘플링 후 근거를 유지(라인 범위 보존)
+- 타임아웃: 툴 30s 기본, LLM 60s, 전체 파이프라인 5분

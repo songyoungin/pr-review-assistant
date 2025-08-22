@@ -1,0 +1,30 @@
+---
+description: 툴 콜링 인터페이스(계약) 정의: Git/Diff, Parser, LLM, Static Analysis, Docs/Schema 헬퍼.
+alwaysApply: false
+---
+
+# 공통 규칙
+- 모든 툴은 동기/비동기 인터페이스를 제공(MAY). 대용량은 비동기 권장.
+- 입력/출력은 JSON(텍스트 대량은 경로 참조).
+- 툴은 "id, version, capabilities"를 노출하여 호환성 검증.
+
+# 툴 계약(요약; 함수명은 예시)
+- GitTool
+  get_pr_context(repo, pr_number?) -> {base, head, files[], title, url}
+  get_diff(base, head, unified=true) -> {patch_path, files_path}
+- DiffParser
+  parse_unified_diff(patch_path) -> {files: [{path,hunks:[{start,len,added,removed}]}]}
+  extract_api_changes(files[]) -> {rest[], grpc[], graphql[], cli[], env[], config[]}
+- CodeQLTool|StaticAnalyzer(MAY)
+  run(paths[], config) -> {findings[]}
+- DocMatcher
+  match_api_to_docs(api_changes, doc_paths[]) -> {mismatches[], patches?}
+- SchemaTool
+  detect_changes(diff) -> {ddl_changes[], breaking[]}
+  generate_ops_guide(changes) -> {pre,steps,post,rollback}
+- LLMTool
+  complete(messages[], schema?) -> {content, citations?, usage}
+
+# 시간/자원 한도(가드레일)
+- 단일 LLM 호출 토큰 상한: 16k(기본), 필요 시 함수-호출로 분할
+- 파일당 최대 라인: 10k 라인 초과 시 샘플링/요약 후 근거 유지

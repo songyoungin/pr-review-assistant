@@ -1,0 +1,35 @@
+---
+description: 멀티 에이전트 간 계약(Contract), 상태 공유, 오류 모델, 인터럽트/재시도 규칙.
+alwaysApply: false
+---
+
+# 공통 메시지 포맷(JSON Schema 요약)
+- RequestEnvelope { request_id, created_at, agent, payload, attachments? }
+- ResponseEnvelope { request_id, agent, status(ok|error|partial), payload, evidence[], metrics }
+
+# 상태(State)
+- OrchestratorState {
+    repo: { provider, url, default_branch },
+    pr?: { number, title, base, head, author, url },
+    diff: { unified_patch_path, changed_files_path },
+    outputs: { summary?, code_review?, docs?, schema?, final_report? }
+  }
+
+# 에이전트 I/O(요약)
+- DiffSummarizer.in: { diff_path, files_path }
+  out: { tldr, highlights[], risks[], release_notes? }
+- CodeReviewer.in: { diff_path, files[], language_hints?, ruleset_version }
+  out: { findings[{file,line,severity,rule_id,message,fix_suggestion?}], coverage_hints? }
+- DocsConsistencyChecker.in: { diff_path, doc_globs[], api_hints? }
+  out: { mismatches[{type,target,ref_evidence,patch_suggestion?}], score }
+- SchemaChangeAnalyst.in: { diff_path, schema_roots[], engine }
+  out: { ddl_changes[], breaking[], ops_guide{pre,steps,post,rollback}, score }
+
+# 오류/재시도
+- 툴 실패는 ResponseEnvelope.status=error, error_code, retryable(bool)
+- Orchestrator는 retryable=true일 때 지수백오프(최대 3회)
+- 부분 실패는 status=partial로 표기, final_report에 섹션별 상태 표시
+
+# 합성 규칙
+- 모든 결과는 "근거 라인"이 최소 1개 이상 포함되어야 함
+- severity: high|medium|low, rule_id는 룰북에 존재하는 값만 허용

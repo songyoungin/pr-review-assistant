@@ -1,0 +1,29 @@
+---
+description: 코드 컨벤션(언어 중립 원칙 + Python/TypeScript 권장), 버전·포맷·정적분석 규칙.
+alwaysApply: false
+---
+
+# 공통
+- 반드시 타입 우선 설계(런타임 검증 + 정적 타입 검사)로 계약을 강화한다.
+- Public 함수/클래스는 docstring(또는 TSDoc) 필수: 목적/입력/출력/예외/예시
+- "MUST/SHOULD/MAY" 수준을 코멘트에 명시하여 의도/우선순위를 남긴다.
+- 로깅은 구조화(JSON) + trace_id/correlation_id 포함.
+
+# Python
+- 버전: 3.12+
+- 포맷: ruff-format
+- 린트: ruff
+- 타입: mypy(strict 모드)
+- 테스트: pytest + coverage(명시적 경계/에러 케이스)
+- 의존성: uv(락 필수); optional extras로 LLM/DB/CLI 나눔
+- 예외 정책: 사용자 오류(UserError) vs 시스템 오류(SystemError) 구분, 에러코드 테이블 고정
+
+# TypeScript
+- 버전: ES2022 타깃, TS 5.x
+- 포맷: biome 또는 prettier+eslint; 린트: eslint(strict)
+- 타입: strict true, noImplicitAny true, exactOptionalPropertyTypes true
+- API/DTO는 zod/valibot으로 런타임 스키마 검증
+
+# 커밋/PR
+- Conventional Commits 변형: `feat|fix|perf|refactor|docs|chore(scope): summary`
+- PR 템플릿 필수: 변경 요약, 리스크, 테스트, 마이그레이션 여부

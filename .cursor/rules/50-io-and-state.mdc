@@ -1,0 +1,24 @@
+---
+description: 입출력 파일 레이아웃, 상태 스냅샷, 캐시/재실행 규칙.
+alwaysApply: false
+---
+
+# 디스크 레이아웃(기본)
+./.reports/
+  diff.patch
+  changed_files.txt
+  pr_context.json
+  summary.json
+  code_review.json
+  docs_consistency.json
+  schema_review.json
+  final_report.md
+  final_report.json
+
+# 상태 스냅샷
+- 모든 에이전트 출력은 JSON으로 저장하고, 해시(repo@commit-range + 툴버전)를 메타에 기록
+- 동일 해시 입력은 캐시를 재사용. 'invalidate' 플래그 시 강제 재실행.
+
+# 최종 리포트 포맷(요약)
+- header: repo, pr, commit-range, generated_at, versions
+- sections: tldr, highlights, risks, code_review, docs, schema, actions

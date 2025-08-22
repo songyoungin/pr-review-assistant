@@ -1,0 +1,37 @@
+---
+description: PR 리뷰 어시스턴트(멀티 에이전트 & 툴 콜링)의 시스템 요구사항과 상위 설계를 정의한다.
+alwaysApply: false
+---
+
+# 목표
+- 멀티 에이전트 + 툴 콜링으로 PR 리뷰 워크플로를 자동화한다.
+- 다음 4가지 기능을 1등 시민으로 지원한다:
+  (1) git 브랜치 기반 변경 추출/요약  (2) 코드 리뷰 및 품질 평가
+  (3) 문서 품질/문서-코드 일관성 평가  (4) 데이터 스키마 변경 분석/비교
+
+# 상위 아키텍처 요구사항
+- 오케스트레이션: 멀티 에이전트(최소 4개) + 공통 컨텍스트 공유.
+- 툴 콜링: 모든 외부 상호작용(git, LLM, DB, 파서, 정적분석기)은 "툴" 추상화로 감싼다.
+- 데이터 계약: 에이전트 I/O, 스테이트, 메시지 포맷은 JSON Schema로 고정.
+- 비동기 처리: 대기시간이 큰 작업(디프 파싱, LLM 호출, 대용량 스키마 비교)은 큐/백그라운드 워커로 처리 가능해야 한다.
+- 재현성: 동일 입력 → 동일 출력(LLM 비결정성은 temperature=0 기본, 리트리버/파서 버전 고정).
+- 구성 가능성: 각 기능은 독립 실행/조합 가능(플러그인형).
+
+# 에이전트 분해(역할)
+- DiffSummarizer: 브랜치/PR에서 디프 추출→요약/핵심 포인트 도출
+- CodeReviewer: 변경 코드의 품질/보안/성능 리뷰 + actionable 피드백
+- DocsConsistencyChecker: 공개 인터페이스 변경과 문서 불일치 탐지
+- SchemaChangeAnalyst: 스키마 변경 영향 분석/마이그레이션 가이드
+- Orchestrator: 위 4개 에이전트의 실행 순서/병렬화/합성 리포트 작성
+
+# 워크플로(기본)
+1) Orchestrator가 Diff 툴을 통해 `Unified Diff` + 변경 파일 목록 확보
+2) DiffSummarizer가 요약/핵심 포인트/TL;DR 생성
+3) CodeReviewer/DocsConsistencyChecker/SchemaChangeAnalyst 병렬 실행
+4) Orchestrator가 취합 → 표준 리포트(JSON + Markdown) 산출
+
+# SLAs/비기능 요구사항
+- 처리 시간: 평균 2분 이내(리포지토리 2k~5k 라인 변경 기준), 95p 5분 이내
+- 신뢰성: 툴 실패 시 graceful degradation(해당 섹션만 경고 표기)
+- 투명성: 각 진단은 “근거(파일:라인) + 규칙 링크”를 포함
+- 이식성: git provider(gh/gitlab/bitbucket) 교체 가능(툴 어댑터화)
