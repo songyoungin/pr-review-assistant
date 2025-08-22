@@ -1,0 +1,335 @@
+---
+description: 프로젝트의 디렉토리 구조, 파일 명명 규칙, 모듈 구조, 설정 파일 구조, 테스트 구조, 문서 구조, 스크립트 및 유틸리티, 로그 및 리포트 구조, Git 관련 구조, 의존성 관리, 환경별 설정 분리에 대한 규칙을 정의합니다.
+globs:
+alwaysApply: false
+---
+
+# 프로젝트 구조 개요
+
+## 핵심 원칙
+- **모듈화**: 기능별로 명확하게 분리된 모듈 구조
+- **확장성**: 새로운 에이전트나 툴 추가 시 기존 구조 영향 최소화
+- **가독성**: 직관적인 디렉토리 구조와 파일 명명
+- **일관성**: 모든 모듈에서 동일한 구조 패턴 적용
+
+# 디렉토리 구조
+
+## 루트 레벨 구조
+```
+pr-review-assistant/
+├── agents/           # 에이전트 모듈
+├── tools/            # 툴 모듈
+├── graph/            # 웹 애플리케이션
+├── config/           # 설정 파일
+├── scripts/          # 유틸리티 스크립트
+├── tests/            # 테스트 코드
+├── docs/             # 문서
+├── .reports/         # 생성된 리포트
+├── logs/             # 로그 파일
+└── .github/          # GitHub 관련 설정
+```
+
+## 에이전트 디렉토리 구조
+```
+agents/
+├── __init__.py
+├── base.py           # 기본 에이전트 클래스
+├── diff_summarizer/  # 변경사항 요약 에이전트
+├── code_reviewer/    # 코드 리뷰 에이전트
+├── docs_consistency_checker/  # 문서 일관성 검사 에이전트
+├── schema_change_analyst/     # 스키마 변경 분석 에이전트
+└── orchestrator/     # 워크플로 오케스트레이션
+```
+
+## 툴 디렉토리 구조
+```
+tools/
+├── __init__.py
+├── base.py           # 기본 툴 클래스
+├── git/              # Git 관련 툴
+├── llm/              # LLM 통합 툴
+├── static_analyzer/  # 정적 분석 툴
+├── docs_matcher/     # 문서 매칭 툴
+└── schema_tool/      # 스키마 분석 툴
+```
+
+## 웹 애플리케이션 구조
+```
+graph/
+├── __init__.py
+├── app.py            # FastAPI 애플리케이션
+├── api/              # API 엔드포인트
+├── models/           # 데이터 모델
+├── services/         # 비즈니스 로직
+└── templates/        # HTML 템플릿
+```
+
+# 파일 명명 규칙
+
+## Python 파일 명명
+- **모듈 파일**: snake_case (예: `diff_summarizer.py`)
+- **클래스 파일**: snake_case (예: `code_reviewer.py`)
+- **유틸리티 파일**: snake_case (예: `file_utils.py`)
+- **테스트 파일**: `test_` 접두사 (예: `test_diff_summarizer.py`)
+- **설정 파일**: snake_case (예: `database_config.py`)
+
+## 디렉토리 명명
+- **에이전트 디렉토리**: snake_case (예: `diff_summarizer/`)
+- **툴 디렉토리**: snake_case (예: `static_analyzer/`)
+- **설정 디렉토리**: snake_case (예: `database_config/`)
+- **테스트 디렉토리**: snake_case (예: `unit_tests/`)
+
+## 설정 파일 명명
+- **환경별 설정**: `{environment}.yaml` (예: `production.yaml`)
+- **기능별 설정**: `{feature}_config.yaml` (예: `llm_config.yaml`)
+- **환경변수**: `.env.{environment}` (예: `.env.development`)
+
+# 모듈 구조 규칙
+
+## 에이전트 모듈 구조
+```
+agents/{agent_name}/
+├── __init__.py           # 모듈 초기화
+├── {agent_name}.py       # 메인 에이전트 클래스
+├── models.py             # 데이터 모델 (해당 시)
+├── utils.py              # 유틸리티 함수 (해당 시)
+└── tests/                # 에이전트별 테스트
+    ├── __init__.py
+    ├── test_{agent_name}.py
+    └── fixtures/         # 테스트 데이터
+```
+
+## 툴 모듈 구조
+```
+tools/{tool_name}/
+├── __init__.py           # 모듈 초기화
+├── {tool_name}.py        # 메인 툴 클래스
+├── config.py             # 툴 설정 (해당 시)
+├── exceptions.py         # 커스텀 예외 (해당 시)
+└── tests/                # 툴별 테스트
+    ├── __init__.py
+    ├── test_{tool_name}.py
+    └── mocks/            # 모킹 데이터
+```
+
+## 웹 애플리케이션 모듈 구조
+```
+graph/
+├── __init__.py
+├── app.py                # 메인 애플리케이션
+├── api/                  # API 라우터
+│   ├── __init__.py
+│   ├── v1/               # API 버전
+│   └── dependencies.py   # 의존성 주입
+├── models/               # 데이터 모델
+│   ├── __init__.py
+│   ├── request.py        # 요청 모델
+│   └── response.py       # 응답 모델
+├── services/             # 비즈니스 로직
+│   ├── __init__.py
+│   └── workflow.py       # 워크플로 서비스
+└── utils/                # 유틸리티
+    ├── __init__.py
+    └── helpers.py        # 헬퍼 함수
+```
+
+# 설정 파일 구조
+
+## 메인 설정 파일
+```
+config/
+├── __init__.py
+├── base.yaml             # 기본 설정
+├── development.yaml      # 개발 환경 설정
+├── staging.yaml          # 스테이징 환경 설정
+├── production.yaml       # 프로덕션 환경 설정
+├── test.yaml             # 테스트 환경 설정
+└── local.yaml            # 로컬 개발 설정 (gitignore)
+```
+
+## 환경별 설정 오버라이드
+- **base.yaml**: 모든 환경에서 공통으로 사용하는 기본 설정
+- **{environment}.yaml**: 특정 환경에서만 사용하는 설정
+- **local.yaml**: 개발자 개인 환경 설정 (git에 포함되지 않음)
+- **환경변수**: 민감한 정보는 환경변수로 관리
+
+## 설정 파일 우선순위
+1. 환경변수 (최우선)
+2. local.yaml
+3. {environment}.yaml
+4. base.yaml (최하위)
+
+# 테스트 구조
+
+## 테스트 디렉토리 구조
+```
+tests/
+├── __init__.py
+├── conftest.py           # 공통 테스트 설정
+├── unit/                 # 단위 테스트
+│   ├── __init__.py
+│   ├── agents/           # 에이전트 단위 테스트
+│   ├── tools/            # 툴 단위 테스트
+│   └── utils/            # 유틸리티 단위 테스트
+├── integration/          # 통합 테스트
+│   ├── __init__.py
+│   ├── workflows/        # 워크플로 통합 테스트
+│   └── api/              # API 통합 테스트
+├── e2e/                  # E2E 테스트
+│   ├── __init__.py
+│   └── scenarios/        # 테스트 시나리오
+├── fixtures/             # 테스트 데이터
+│   ├── diffs/            # 샘플 diff 파일
+│   ├── configs/          # 테스트 설정
+│   └── responses/        # 모킹 응답
+└── mocks/                # 모킹 객체
+    ├── __init__.py
+    ├── agents.py         # 에이전트 모킹
+    └── tools.py          # 툴 모킹
+```
+
+## 테스트 파일 명명
+- **단위 테스트**: `test_{module_name}.py`
+- **통합 테스트**: `test_{feature}_integration.py`
+- **E2E 테스트**: `test_{scenario}_e2e.py`
+- **모킹 파일**: `mocks/{category}.py`
+
+# 문서 구조
+
+## 문서 디렉토리 구조
+```
+docs/
+├── README.md             # 프로젝트 개요
+├── INSTALLATION.md       # 설치 가이드
+├── USAGE.md              # 사용법 가이드
+├── API.md                # API 문서
+├── ARCHITECTURE.md       # 아키텍처 설명
+├── DEVELOPMENT.md        # 개발 가이드
+├── DEPLOYMENT.md         # 배포 가이드
+├── TROUBLESHOOTING.md    # 문제 해결 가이드
+└── CHANGELOG.md          # 변경 이력
+```
+
+## 코드 문서화
+- **모듈 레벨**: 각 `__init__.py`에 모듈 설명
+- **클래스 레벨**: 모든 공개 클래스에 docstring
+- **메서드 레벨**: 모든 공개 메서드에 docstring
+- **함수 레벨**: 모든 공개 함수에 docstring
+
+# 스크립트 및 유틸리티
+
+## 스크립트 디렉토리 구조
+```
+scripts/
+├── setup/                # 환경 설정 스크립트
+│   ├── install.sh        # 의존성 설치
+│   ├── setup_env.sh      # 환경 설정
+│   └── setup_db.sh       # 데이터베이스 설정
+├── deployment/           # 배포 스크립트
+│   ├── deploy.sh         # 배포 실행
+│   ├── rollback.sh       # 롤백 실행
+│   └── health_check.sh   # 헬스체크
+├── maintenance/          # 유지보수 스크립트
+│   ├── backup.sh         # 백업 실행
+│   ├── cleanup.sh        # 정리 실행
+│   └── security_audit.sh # 보안 감사
+└── development/          # 개발 도구
+    ├── lint.sh           # 린팅 실행
+    ├── test.sh           # 테스트 실행
+    └── coverage.sh       # 커버리지 측정
+```
+
+## 스크립트 명명 규칙
+- **설치 스크립트**: `install_{component}.sh`
+- **설정 스크립트**: `setup_{component}.sh`
+- **배포 스크립트**: `deploy_{environment}.sh`
+- **유지보수 스크립트**: `{action}_{component}.sh`
+
+# 로그 및 리포트 구조
+
+## 로그 디렉토리 구조
+```
+logs/
+├── app/                  # 애플리케이션 로그
+│   ├── app.log          # 현재 로그
+│   ├── app.log.1        # 이전 로그
+│   └── app.log.gz       # 압축된 로그
+├── access/               # 접근 로그
+├── error/                # 에러 로그
+└── security/             # 보안 로그
+```
+
+## 리포트 디렉토리 구조
+```
+.reports/
+├── {pr_number}/          # PR별 리포트
+│   ├── diff.patch        # 변경사항 diff
+│   ├── summary.json      # 요약 리포트
+│   ├── code_review.json  # 코드 리뷰 결과
+│   ├── docs_check.json   # 문서 일관성 결과
+│   ├── schema_analysis.json  # 스키마 분석 결과
+│   ├── final_report.md   # 최종 Markdown 리포트
+│   └── final_report.json # 최종 JSON 리포트
+├── cache/                 # 캐시된 결과
+└── archive/               # 아카이브된 리포트
+```
+
+# Git 관련 구조
+
+## GitHub 워크플로우 구조
+```
+.github/
+├── workflows/             # GitHub Actions 워크플로우
+│   ├── ci-cd.yml         # CI/CD 파이프라인
+│   ├── pr-review.yml     # PR 자동 리뷰
+│   └── release.yml       # 릴리즈 워크플로우
+├── branch-protection/     # 브랜치 보호 규칙
+│   ├── main.yml          # main 브랜치 보호
+│   └── develop.yml       # develop 브랜치 보호
+├── environments/          # 배포 환경 설정
+│   ├── production.yml    # 프로덕션 환경
+│   └── staging.yml       # 스테이징 환경
+└── ISSUE_TEMPLATE/        # 이슈 템플릿
+    ├── bug_report.md      # 버그 리포트 템플릿
+    └── feature_request.md # 기능 요청 템플릿
+```
+
+# 의존성 관리
+
+## Python 의존성 구조
+```
+pyproject.toml            # 프로젝트 메타데이터 및 의존성
+uv.lock                   # 의존성 잠금 파일
+requirements/              # 요구사항 파일 (선택적)
+├── base.txt              # 기본 의존성
+├── dev.txt               # 개발 의존성
+├── test.txt              # 테스트 의존성
+└── production.txt        # 프로덕션 의존성
+```
+
+## 의존성 그룹 분리
+- **base**: 핵심 런타임 의존성
+- **dev**: 개발 도구 (linting, formatting, testing)
+- **test**: 테스트 프레임워크 및 모킹 도구
+- **production**: 프로덕션 전용 도구
+
+# 환경별 설정 분리
+
+## 환경 설정 파일 구조
+```
+config/
+├── environments/          # 환경별 설정
+│   ├── development/      # 개발 환경
+│   ├── staging/          # 스테이징 환경
+│   └── production/       # 프로덕션 환경
+├── features/              # 기능별 설정
+│   ├── llm/              # LLM 설정
+│   ├── git/              # Git 설정
+│   └── security/         # 보안 설정
+└── shared/                # 공통 설정
+    ├── logging.yaml       # 로깅 설정
+    ├── monitoring.yaml    # 모니터링 설정
+    └── database.yaml      # 데이터베이스 설정
+```
+
+이러한 프로젝트 구조 규칙을 통해 일관되고 확장 가능한 코드베이스를 구축할 수 있습니다.

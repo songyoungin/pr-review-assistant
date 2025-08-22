@@ -1,31 +1,125 @@
 ---
-description: 코드 컨벤션(언어 중립 원칙 + Python/TypeScript 권장), 버전·포맷·정적분석 규칙.
-alwaysApply: false
+description: 코딩 컨벤션 및 코드 품질 규칙
+alwaysApply: true
 ---
 
-# 공통
-- 반드시 타입 우선 설계(런타임 검증 + 정적 타입 검사)로 계약을 강화한다.
-- Public 함수/클래스는 docstring(또는 TSDoc) 필수: 목적/입력/출력/예외/예시
-- docstring은 영어로 작성.
-- "MUST/SHOULD/MAY" 수준을 코멘트에 명시하여 의도/우선순위를 남긴다.
-- 로깅은 구조화(JSON) + trace_id/correlation_id 포함.
+# 공통 코딩 원칙
 
-# Python
-- 버전: 3.12+
-- 포맷: ruff-format
-- 린트: ruff
-- 타입: mypy(strict 모드)
-- 테스트: pytest + coverage(명시적 경계/에러 케이스)
-- 의존성: uv(락 필수); optional extras로 LLM/DB/CLI 나눔
-- 예외 정책: 사용자 오류(UserError) vs 시스템 오류(SystemError) 구분, 에러코드 테이블 고정
-- 코드 품질 검사: pre-commit을 통해서만 mypy, ruff 실행 (직접 실행 금지)
-- 설정 일원화: .pre-commit-config.yaml에는 hook 목록만, 상세 설정은 pyproject.toml에
+## 핵심 원칙
+- **타입 우선 설계**: 런타임 검증 + 정적 타입 검사로 계약을 강화
+- **문서화 우선**: Public 함수/클래스는 docstring(또는 TSDoc) 필수
+- **의도 명시**: "MUST/SHOULD/MAY" 수준을 코멘트에 명시하여 우선순위 표현
+- **구조화된 로깅**: JSON 형식 + trace_id/correlation_id 포함
 
-# TypeScript
-- 버전: ES2022 타깃, TS 5.x
-- 포맷: biome 또는 prettier+eslint; 린트: eslint(strict)
-- 타입: strict true, noImplicitAny true, exactOptionalPropertyTypes true
-- API/DTO는 zod/valibot으로 런타임 스키마 검증
+## 코드 품질 기준
+- **가독성 우선**: 성능과 충돌 시 가독성을 우선시 (PRD 요구사항)
+- **단일 책임**: 각 컴포넌트는 하나의 명확한 책임만 가짐
+- **테스트 가능성**: 모든 비즈니스 로직은 단위 테스트 가능해야 함
+- **에러 처리**: 명확한 에러 타입과 복구 전략 제공
+
+# Python 코딩 컨벤션
+
+## 버전 및 환경
+- **Python 버전**: 3.12+ (타입 힌트, 비동기 지원, 성능 개선)
+- **의존성 관리**: uv + lock 파일 (재현 가능한 빌드)
+- **가상환경**: `.venv` 디렉토리 사용
+
+## 코드 포맷팅
+- **ruff-format 사용**: black 호환 포맷터
+- **라인 길이**: 88자
+- **따옴표 스타일**: double quotes
+- **들여쓰기**: space 4칸
+
+## 린팅 규칙
+- **ruff 사용**: flake8, isort, pyupgrade 통합
+- **대상 버전**: Python 3.12
+- **라인 길이**: 88자
+- **규칙 선택**: E, W, F, I, B, C4, UP, N, S, A, COM, DTZ, T20, TCH, ARG, PIE, SIM, TID, Q, RSE, RET, SLF, SLOT, TRY, NPY, PTH, AIR, PERF, FURB, LOG, PYI, PT
+- **제외 규칙**: E501, B008, C901, S101, S603, S607
+
+## 타입 힌팅
+- **mypy strict 모드**: 모든 공개 인터페이스에 명시적 타입 정의
+- **Any 사용 금지**: 구체적인 타입 또는 Protocol 사용
+- **제네릭**: 의미가 명확할 때만 사용
+- **타입 검증**: Pydantic 또는 dataclasses 활용
+
+## 테스트 규칙
+- **pytest 사용**: 테스트 클래스 대신 함수 사용
+- **테스트 명명**: `test_<function_name>_<scenario>()` 형식
+- **Given-When-Then**: 테스트 구조화
+- **Mock 사용**: 데코레이터 방식으로 모킹
+- **테스트 문서화**: docstring과 주석으로 테스트 목적 명시
+
+## 예외 처리 정책
+- **사용자 오류 vs 시스템 오류**: 명확한 구분
+- **에러 코드 체계**: E001~E006 (시스템), U001~U003 (사용자)
+- **재시도 가능성**: 일시적 오류와 영구적 오류 구분
+- **에러 메시지**: 사용자 친화적이고 실행 가능한 정보 제공
+
+## 로깅 규칙
+- **JSON 형식**: 구조화된 로그 포맷
+- **필수 필드**: timestamp, level, logger, message, module, function, line
+- **선택 필드**: trace_id, correlation_id, agent, tool
+- **민감 정보**: 토큰, 경로, 계정명 마스킹
+
+# TypeScript 코딩 컨벤션
+
+## 버전 및 설정
+- **TypeScript**: 5.x, ES2022 타겟
+- **포맷터**: biome 또는 prettier + eslint
+- **린터**: eslint (strict 모드)
+
+## 타입 안전성
+- **strict 모드**: 모든 엄격한 타입 검사 활성화
+- **noImplicitAny**: 암시적 any 금지
+- **exactOptionalPropertyTypes**: 정확한 옵셔널 타입
+- **noUncheckedIndexedAccess**: 인덱스 접근 검증
+
+## API/DTO 검증
+- **zod/valibot**: 런타임 데이터 검증
+- **스키마 정의**: 모든 공개 인터페이스에 스키마 정의
+- **타입 추론**: 스키마로부터 타입 자동 생성
+
+# 커밋 및 PR 규칙
+
+## 커밋 메시지
+- **Conventional Commits 변형**: `feat|fix|perf|refactor|docs|chore(scope): summary`
+- **스코프 예시**: agents, tools, workflow, api, ci, docs
+- **설명**: 간결하고 명확한 변경사항 요약
+
+## PR 템플릿
+- **변경 요약**: 주요 변경사항 간단 설명
+- **변경 유형**: 체크박스로 변경 유형 표시
+- **리스크 평가**: 잠재적 리스크 기술
+- **테스트 계획**: 테스트 커버리지 및 계획
+- **마이그레이션 필요성**: breaking change 여부
+
+# 코드 품질 검사
+
+## pre-commit 설정
+- **훅 구성**: trailing-whitespace, end-of-file-fixer, check-yaml, check-added-large-files, check-merge-conflict
+- **코드 포맷팅**: ruff, ruff-format
+- **타입 검사**: mypy
+- **설정 파일**: pyproject.toml에 상세 설정
+
+## 실행 규칙
+- **pre-commit을 통해서만 실행**: 직접 실행 금지
+- **가상환경 활성화**: `.venv` 활성화 후 실행
+- **전체 파일**: `pre-commit run --all-files`
+- **특정 파일**: `pre-commit run --files <file_path>`
+
+# 성능 및 최적화
+
+## 성능 가이드라인
+- **캐싱**: 동일 입력에 대한 결과 재사용
+- **지연 로딩**: 필요 시에만 리소스 로드
+- **비동기 처리**: I/O 대기 시간이 긴 작업
+- **메모리 관리**: 대용량 데이터 처리 시 청크 단위 처리
+
+## 메모리 관리
+- **사용량 모니터링**: psutil을 통한 메모리 추적
+- **가비지 컬렉션**: 필요 시 강제 실행
+- **메모리 제한**: 100MB 초과 시 경고
 
 # 커밋/PR
 - Conventional Commits 변형: `feat|fix|perf|refactor|docs|chore(scope): summary`

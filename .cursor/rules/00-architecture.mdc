@@ -1,37 +1,76 @@
 ---
-description: PR 리뷰 어시스턴트(멀티 에이전트 & 툴 콜링)의 시스템 요구사항과 상위 설계를 정의한다.
-alwaysApply: false
+description: 멀티 에이전트 기반 PR 리뷰 자동화 시스템의 아키텍처 및 설계 원칙을 정의합니다.
+alwaysApply: true
 ---
 
-# 목표
-- 멀티 에이전트 + 툴 콜링으로 PR 리뷰 워크플로를 자동화한다.
-- 다음 4가지 기능을 1등 시민으로 지원한다:
-  (1) git 브랜치 기반 변경 추출/요약  (2) 코드 리뷰 및 품질 평가
-  (3) 문서 품질/문서-코드 일관성 평가  (4) 데이터 스키마 변경 분석/비교
+# 시스템 목표
+PRD G1~G4를 달성하는 멀티 에이전트 기반 PR 리뷰 자동화 시스템을 구축한다:
+- G1: git 브랜치/PR 기반 변경사항 자동 수집·요약
+- G2: 변경 코드에 대한 품질/보안/성능 리뷰 결과 제공
+- G3: 공개 인터페이스 변화 대비 문서 일관성 점검
+- G4: 데이터 스키마 변경 영향(브레이킹/운영) 분석
 
-# 상위 아키텍처 요구사항
-- 오케스트레이션: 멀티 에이전트(최소 4개) + 공통 컨텍스트 공유.
-- 툴 콜링: 모든 외부 상호작용(git, LLM, DB, 파서, 정적분석기)은 "툴" 추상화로 감싼다.
-- 데이터 계약: 에이전트 I/O, 스테이트, 메시지 포맷은 JSON Schema로 고정.
-- 비동기 처리: 대기시간이 큰 작업(디프 파싱, LLM 호출, 대용량 스키마 비교)은 큐/백그라운드 워커로 처리 가능해야 한다.
-- 재현성: 동일 입력 → 동일 출력(LLM 비결정성은 temperature=0 기본, 리트리버/파서 버전 고정).
-- 구성 가능성: 각 기능은 독립 실행/조합 가능(플러그인형).
+# 핵심 설계 원칙
+## 멀티 에이전트 아키텍처
+- **Orchestrator**: 전체 워크플로 조율, 에이전트 간 상태 공유, 최종 리포트 생성
+- **DiffSummarizer**: 변경사항 요약, 핵심 포인트 도출, 리스크 식별
+- **CodeReviewer**: 코드 품질/보안/성능 분석, actionable 피드백 제공
+- **DocsConsistencyChecker**: API 변경과 문서 불일치 탐지, 패치 제안
+- **SchemaChangeAnalyst**: 스키마 변경 영향 분석, 마이그레이션 가이드 생성
 
-# 에이전트 분해(역할)
-- DiffSummarizer: 브랜치/PR에서 디프 추출→요약/핵심 포인트 도출
-- CodeReviewer: 변경 코드의 품질/보안/성능 리뷰 + actionable 피드백
-- DocsConsistencyChecker: 공개 인터페이스 변경과 문서 불일치 탐지
-- SchemaChangeAnalyst: 스키마 변경 영향 분석/마이그레이션 가이드
-- Orchestrator: 위 4개 에이전트의 실행 순서/병렬화/합성 리포트 작성
+## 툴 추상화 계층
+- 모든 외부 상호작용은 툴 인터페이스로 추상화
+- Git, LLM, Parser, Static Analysis, Schema Analysis 등
+- 동기/비동기 실행 지원, 실패 시 graceful degradation
 
-# 워크플로(기본)
-1) Orchestrator가 Diff 툴을 통해 `Unified Diff` + 변경 파일 목록 확보
-2) DiffSummarizer가 요약/핵심 포인트/TL;DR 생성
-3) CodeReviewer/DocsConsistencyChecker/SchemaChangeAnalyst 병렬 실행
-4) Orchestrator가 취합 → 표준 리포트(JSON + Markdown) 산출
+## 데이터 계약 및 상태 관리
+- JSON Schema 기반 엄격한 타입 정의
+- 에이전트 간 메시지 포맷 표준화
+- 중앙 집중식 상태 관리 및 스냅샷 지원
 
-# SLAs/비기능 요구사항
-- 처리 시간: 평균 2분 이내(리포지토리 2k~5k 라인 변경 기준), 95p 5분 이내
+# 워크플로 설계
+## 기본 실행 흐름
+1. **초기화**: GitTool로 PR 컨텍스트 및 diff 생성
+2. **변경 요약**: DiffSummarizer가 TL;DR, 하이라이트, 리스크 생성
+3. **병렬 분석**: CodeReviewer, DocsConsistencyChecker, SchemaChangeAnalyst 동시 실행
+4. **결과 집계**: Orchestrator가 모든 결과를 취합하여 최종 리포트 생성
+5. **출력**: JSON/Markdown 리포트 + CI 코멘트 게시
+
+## 에러 처리 및 재시도
+- 부분 실패 시 해당 섹션만 경고 표기 (Partial Success)
+- 재시도 가능한 오류는 지수 백오프로 최대 3회 시도
+- 전체 파이프라인 타임아웃: 5분 (NFR-1 기준)
+
+# 성능 및 확장성
+## 처리 용량
+- **기본**: 2k~5k 변경 라인 (평균 2분 이내)
+- **대용량**: 10k+ 라인 시 샘플링 + 근거 라인 보존
+- **병렬화**: 독립적인 에이전트는 동시 실행으로 처리 시간 단축
+
+## 구성 가능성
+- 각 기능은 독립 실행/조합 가능 (플러그인 아키텍처)
+- 에이전트별 활성화/비활성화 설정 지원
+- 규칙셋 버전 관리 및 A/B 테스트 지원
+
+# 기술 스택 요구사항
+## 핵심 기술
+- **언어**: Python 3.12+ (타입 안전성, 비동기 지원)
+- **의존성 관리**: uv + lock 파일
+- **테스트**: pytest + coverage
+- **품질 검사**: pre-commit (mypy, ruff)
+
+## 외부 의존성
+- **Git 제공자**: GitHub/GitLab/Bitbucket 어댑터
+- **LLM**: OpenAI, Anthropic, Local 모델 지원
+- **정적 분석**: CodeQL, Bandit, Safety 등
+- **스키마 분석**: SQLAlchemy, Pydantic 등
+
+# 보안 및 개인정보보호
+- 민감 정보 마스킹 (토큰, 경로, 계정명)
+- PII/소스코드 전문 유출 금지
+- 환경변수 기반 설정 관리
+- 리포트 보존 주기: 7일 (구성 가능)
+
 - 신뢰성: 툴 실패 시 graceful degradation(해당 섹션만 경고 표기)
 - 투명성: 각 진단은 “근거(파일:라인) + 규칙 링크”를 포함
 - 이식성: git provider(gh/gitlab/bitbucket) 교체 가능(툴 어댑터화)

@@ -1,34 +1,252 @@
 ---
-description: 멀티 에이전트 간 계약(Contract), 상태 공유, 오류 모델, 인터럽트/재시도 규칙.
-alwaysApply: false
+description: 에이전트 메시지 계약
+alwaysApply: true
 ---
 
-# 공통 메시지 포맷(JSON Schema 요약)
-- RequestEnvelope { request_id, created_at, agent, payload, attachments? }
-- ResponseEnvelope { request_id, agent, status(ok|error|partial), payload, evidence[], metrics }
+# 에이전트 메시지 계약
 
-# 상태(State)
-- OrchestratorState {
-    repo: { provider, url, default_branch },
-    pr?: { number, title, base, head, author, url },
-    diff: { unified_patch_path, changed_files_path },
-    outputs: { summary?, code_review?, docs?, schema?, final_report? }
+## 공통 메시지 포맷 (JSON Schema)
+```json
+{
+  "RequestEnvelope": {
+    "request_id": "uuid4",
+    "created_at": "ISO8601",
+    "agent": "string",
+    "payload": "object",
+    "attachments": ["string"],
+    "trace_id": "string",
+    "correlation_id": "string"
+  },
+  "ResponseEnvelope": {
+    "request_id": "uuid4",
+    "agent": "string",
+    "status": "ok|error|partial",
+    "payload": "object",
+    "evidence": ["Evidence"],
+    "metrics": "Metrics",
+    "error_code": "string?",
+    "retryable": "boolean?",
+    "partial_results": "object?"
   }
+}
+```
 
-# 에이전트 I/O(요약)
-- DiffSummarizer.in: { diff_path, files_path }
-  out: { tldr, highlights[], risks[], release_notes? }
-- CodeReviewer.in: { diff_path, files[], language_hints?, ruleset_version }
-  out: { findings[{file,line,severity,rule_id,message,fix_suggestion?}], coverage_hints? }
-- DocsConsistencyChecker.in: { diff_path, doc_globs[], api_hints? }
-  out: { mismatches[{type,target,ref_evidence,patch_suggestion?}], score }
-- SchemaChangeAnalyst.in: { diff_path, schema_roots[], engine }
-  out: { ddl_changes[], breaking[], ops_guide{pre,steps,post,rollback}, score }
+## 증거(Evidence) 스키마
+```json
+{
+  "Evidence": {
+    "type": "diff|file|line|rule|api|schema",
+    "target": "string",
+    "line_range": {"start": "number", "end": "number"},
+    "file_path": "string",
+    "rule_id": "string",
+    "rule_version": "string",
+    "description": "string",
+    "confidence": "number"
+  }
+}
+```
 
-# 오류/재시도
-- 툴 실패는 ResponseEnvelope.status=error, error_code, retryable(bool)
-- Orchestrator는 retryable=true일 때 지수백오프(최대 3회)
-- 부분 실패는 status=partial로 표기, final_report에 섹션별 상태 표시
+## 메트릭(Metrics) 스키마
+```json
+{
+  "Metrics": {
+    "processing_time_ms": "number",
+    "tokens_used": "number?",
+    "files_processed": "number",
+    "lines_analyzed": "number",
+    "rules_applied": "number",
+    "cache_hits": "number"
+  }
+}
+```
+
+# 중앙 상태 관리 (OrchestratorState)
+
+## 상태 스키마
+```json
+{
+  "OrchestratorState": {
+    "repo": {
+      "provider": "github|gitlab|bitbucket",
+      "url": "string",
+      "default_branch": "string",
+      "clone_path": "string"
+    },
+    "pr": {
+      "number": "number",
+      "title": "string",
+      "base": "string",
+      "head": "string",
+      "author": "string",
+      "url": "string",
+      "created_at": "ISO8601",
+      "updated_at": "ISO8601"
+    },
+    "diff": {
+      "unified_patch_path": "string",
+      "changed_files_path": "string",
+      "total_lines": "number",
+      "files_count": "number"
+    },
+    "outputs": {
+      "summary": "DiffSummary?",
+      "code_review": "CodeReviewResult?",
+      "docs_consistency": "DocsConsistencyResult?",
+      "schema_analysis": "SchemaAnalysisResult?",
+      "final_report": "FinalReport?"
+    },
+    "execution": {
+      "started_at": "ISO8601",
+      "completed_at": "ISO8601?",
+      "status": "running|completed|failed|partial",
+      "agent_status": "Map<string, AgentStatus>"
+    }
+  }
+}
+```
+
+# 에이전트별 I/O 계약
+
+## DiffSummarizer
+### 입력
+```json
+{
+  "diff_path": "string",
+  "files_path": "string",
+  "max_highlights": "number?",
+  "include_risks": "boolean?"
+}
+```
+
+### 출력
+```json
+{
+  "DiffSummary": {
+    "tldr": "string",
+    "highlights": ["string"],
+    "risks": ["Risk"],
+    "release_notes": "string?",
+    "deployment_impact": "low|medium|high",
+    "compatibility_impact": "none|backward|forward|breaking"
+  }
+}
+```
+
+## CodeReviewer
+### 입력
+```json
+{
+  "diff_path": "string",
+  "files": ["string"],
+  "language_hints": ["string"],
+  "ruleset_version": "string",
+  "severity_threshold": "low|medium|high"
+}
+```
+
+### 출력
+```json
+{
+  "CodeReviewResult": {
+    "findings": ["Finding"],
+    "coverage_hints": ["string"],
+    "quality_score": "number",
+    "security_score": "number",
+    "performance_score": "number"
+  }
+}
+```
+
+## DocsConsistencyChecker
+### 입력
+```json
+{
+  "diff_path": "string",
+  "doc_globs": ["string"],
+  "api_hints": ["string"],
+  "check_types": ["api|config|cli|env"]
+}
+```
+
+### 출력
+```json
+{
+  "DocsConsistencyResult": {
+    "mismatches": ["Mismatch"],
+    "score": "number",
+    "missing_docs": ["string"],
+    "outdated_docs": ["string"],
+    "patch_suggestions": ["PatchSuggestion"]
+  }
+}
+```
+
+## SchemaChangeAnalyst
+### 입력
+```json
+{
+  "diff_path": "string",
+  "schema_roots": ["string"],
+  "engine": "postgresql|mysql|sqlite|mongodb",
+  "include_ops_guide": "boolean?"
+}
+```
+
+### 출력
+```json
+{
+  "SchemaAnalysisResult": {
+    "ddl_changes": ["DDLChange"],
+    "breaking": ["BreakingChange"],
+    "ops_guide": {
+      "pre": ["string"],
+      "steps": ["string"],
+      "post": ["string"],
+      "rollback": ["string"]
+    },
+    "score": "number",
+    "migration_complexity": "low|medium|high"
+  }
+}
+```
+
+# 오류 모델 및 재시도 정책
+
+## 오류 코드 체계
+- **E001**: Git 작업 실패 (재시도 가능)
+- **E002**: LLM 호출 실패 (재시도 가능)
+- **E003**: 파일 파싱 실패 (재시도 불가)
+- **E004**: 권한 부족 (재시도 불가)
+- **E005**: 타임아웃 (재시도 가능)
+- **E006**: 메모리 부족 (재시도 불가)
+
+## 재시도 정책
+- **지수 백오프**: 1s, 2s, 4s 간격으로 최대 3회
+- **재시도 가능 조건**: `retryable: true` + 오류 코드 E001, E002, E005
+- **부분 실패 처리**: `status: partial` + `partial_results` 포함
+
+## Graceful Degradation
+- 에이전트 실패 시 해당 섹션만 경고 표기
+- 최소한의 결과라도 제공하여 전체 파이프라인 중단 방지
+- 실패 원인과 영향 범위를 명확히 기록
+
+# 합성 및 검증 규칙
+
+## 근거 라인 필수 조건
+- 모든 결과는 최소 1개 이상의 `Evidence` 포함
+- `line_range`는 정확한 파일 경로와 라인 번호 명시
+- `confidence` 값은 0.0~1.0 범위로 표시
+
+## 심각도 및 규칙 관리
+- **severity**: `high|medium|low` (PRD NFR-2 기준)
+- **rule_id**: 규칙북에 존재하는 값만 허용
+- **rule_version**: 규칙 변경 추적을 위한 버전 관리
+
+## 품질 게이트 연동
+- 각 에이전트 결과는 품질 등급(A~D) 계산에 기여
+- 차단 조건 발견 시 즉시 Orchestrator에 알림
+- 경고 조건은 최종 리포트에 집계하여 표시
 
 # 합성 규칙
 - 모든 결과는 "근거 라인"이 최소 1개 이상 포함되어야 함

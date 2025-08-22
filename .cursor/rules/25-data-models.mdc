@@ -1,0 +1,413 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+
+# 데이터 모델 설계 원칙
+
+## 핵심 원칙
+- **타입 안전성**: 모든 공개 인터페이스에 명시적 타입 정의
+- **스키마 우선**: JSON Schema 기반 엄격한 데이터 검증
+- **버전 관리**: 스키마 변경 시 하위 호환성 보장
+- **문서화**: 모든 데이터 구조에 명확한 설명과 예시 포함
+
+## 스키마 버전 관리
+- **시맨틱 버저닝**: MAJOR.MINOR.PATCH 형식
+- **변경 이력**: 모든 스키마 변경사항을 CHANGELOG에 기록
+- **마이그레이션**: 하위 호환성이 깨지는 변경 시 마이그레이션 가이드 제공
+
+# 핵심 데이터 모델
+
+## 1. 기본 엔티티
+
+### Repository
+```json
+{
+  "Repository": {
+    "type": "object",
+    "properties": {
+      "id": {"type": "string", "format": "uuid"},
+      "provider": {"type": "string", "enum": ["github", "gitlab", "bitbucket"]},
+      "url": {"type": "string", "format": "uri"},
+      "name": {"type": "string"},
+      "default_branch": {"type": "string"},
+      "clone_path": {"type": "string"},
+      "created_at": {"type": "string", "format": "date-time"},
+      "updated_at": {"type": "string", "format": "date-time"}
+    },
+    "required": ["id", "provider", "url", "name", "default_branch"],
+    "additionalProperties": false
+  }
+}
+```
+
+### PullRequest
+```json
+{
+  "PullRequest": {
+    "type": "object",
+    "properties": {
+      "id": {"type": "string", "format": "uuid"},
+      "number": {"type": "integer", "minimum": 1},
+      "title": {"type": "string", "minLength": 1},
+      "description": {"type": "string"},
+      "base": {"type": "string"},
+      "head": {"type": "string"},
+      "author": {"type": "string"},
+      "url": {"type": "string", "format": "uri"},
+      "state": {"type": "string", "enum": ["open", "closed", "merged"]},
+      "created_at": {"type": "string", "format": "date-time"},
+      "updated_at": {"type": "string", "format": "date-time"},
+      "merged_at": {"type": "string", "format": "date-time"},
+      "closed_at": {"type": "string", "format": "date-time"}
+    },
+    "required": ["id", "number", "title", "base", "head", "author", "url", "state"],
+    "additionalProperties": false
+  }
+}
+```
+
+### Diff
+```json
+{
+  "Diff": {
+    "type": "object",
+    "properties": {
+      "id": {"type": "string", "format": "uuid"},
+      "pr_id": {"type": "string", "format": "uuid"},
+      "base_commit": {"type": "string", "minLength": 7, "maxLength": 40},
+      "head_commit": {"type": "string", "minLength": 7, "maxLength": 40},
+      "unified_patch_path": {"type": "string"},
+      "changed_files_path": {"type": "string"},
+      "total_lines": {"type": "integer", "minimum": 0},
+      "added_lines": {"type": "integer", "minimum": 0},
+      "removed_lines": {"type": "integer", "minimum": 0},
+      "changed_files": {"type": "integer", "minimum": 0},
+      "created_at": {"type": "string", "format": "date-time"}
+    },
+    "required": ["id", "pr_id", "base_commit", "head_commit", "unified_patch_path"],
+    "additionalProperties": false
+  }
+}
+```
+
+## 2. 에이전트 결과 모델
+
+### DiffSummary
+```json
+{
+  "DiffSummary": {
+    "type": "object",
+    "properties": {
+      "id": {"type": "string", "format": "uuid"},
+      "diff_id": {"type": "string", "format": "uuid"},
+      "tldr": {"type": "string", "minLength": 10, "maxLength": 500},
+      "highlights": {
+        "type": "array",
+        "items": {"type": "string", "minLength": 5, "maxLength": 200},
+        "minItems": 1,
+        "maxItems": 10
+      },
+      "risks": {
+        "type": "array",
+        "items": {"$ref": "#/components/schemas/Risk"},
+        "maxItems": 10
+      },
+      "release_notes": {"type": "string"},
+      "deployment_impact": {"type": "string", "enum": ["low", "medium", "high"]},
+      "compatibility_impact": {"type": "string", "enum": ["none", "backward", "forward", "breaking"]},
+      "created_at": {"type": "string", "format": "date-time"}
+    },
+    "required": ["id", "diff_id", "tldr", "highlights", "deployment_impact", "compatibility_impact"],
+    "additionalProperties": false
+  }
+}
+```
+
+### CodeReviewResult
+```json
+{
+  "CodeReviewResult": {
+    "type": "object",
+    "properties": {
+      "id": {"type": "string", "format": "uuid"},
+      "diff_id": {"type": "string", "format": "uuid"},
+      "findings": {
+        "type": "array",
+        "items": {"$ref": "#/components/schemas/Finding"},
+        "minItems": 0
+      },
+      "coverage_hints": {
+        "type": "array",
+        "items": {"type": "string"},
+        "minItems": 0
+      },
+      "quality_score": {"type": "number", "minimum": 0, "maximum": 100},
+      "security_score": {"type": "number", "minimum": 0, "maximum": 100},
+      "performance_score": {"type": "number", "minimum": 0, "maximum": 100},
+      "created_at": {"type": "string", "format": "date-time"}
+    },
+    "required": ["id", "diff_id", "findings", "quality_score", "security_score", "performance_score"],
+    "additionalProperties": false
+  }
+}
+```
+
+### DocsConsistencyResult
+```json
+{
+  "DocsConsistencyResult": {
+    "type": "object",
+    "properties": {
+      "id": {"type": "string", "format": "uuid"},
+      "diff_id": {"type": "string", "format": "uuid"},
+      "mismatches": {
+        "type": "array",
+        "items": {"$ref": "#/components/schemas/Mismatch"},
+        "minItems": 0
+      },
+      "score": {"type": "number", "minimum": 0, "maximum": 100},
+      "missing_docs": {
+        "type": "array",
+        "items": {"type": "string"},
+        "minItems": 0
+      },
+      "outdated_docs": {
+        "type": "array",
+        "items": {"type": "string"},
+        "minItems": 0
+      },
+      "patch_suggestions": {
+        "type": "array",
+        "items": {"$ref": "#/components/schemas/PatchSuggestion"},
+        "minItems": 0
+      },
+      "created_at": {"type": "string", "format": "date-time"}
+    },
+    "required": ["id", "diff_id", "mismatches", "score"],
+    "additionalProperties": false
+  }
+}
+```
+
+### SchemaAnalysisResult
+```json
+{
+  "SchemaAnalysisResult": {
+    "type": "object",
+    "properties": {
+      "id": {"type": "string", "format": "uuid"},
+      "diff_id": {"type": "string", "format": "uuid"},
+      "ddl_changes": {
+        "type": "array",
+        "items": {"$ref": "#/components/schemas/DDLChange"},
+        "minItems": 0
+      },
+      "breaking": {
+        "type": "array",
+        "items": {"$ref": "#/components/schemas/BreakingChange"},
+        "minItems": 0
+      },
+      "ops_guide": {"$ref": "#/components/schemas/OpsGuide"},
+      "score": {"type": "number", "minimum": 0, "maximum": 100},
+      "migration_complexity": {"type": "string", "enum": ["low", "medium", "high"]},
+      "created_at": {"type": "string", "format": "date-time"}
+    },
+    "required": ["id", "diff_id", "ddl_changes", "breaking", "ops_guide", "score", "migration_complexity"],
+    "additionalProperties": false
+  }
+}
+```
+
+## 3. 세부 구성 요소
+
+### Risk
+```json
+{
+  "Risk": {
+    "type": "object",
+    "properties": {
+      "type": {"type": "string", "enum": ["deployment", "security", "performance", "compatibility", "operational"]},
+      "severity": {"type": "string", "enum": ["low", "medium", "high"]},
+      "description": {"type": "string", "minLength": 10},
+      "evidence": {"type": "string"},
+      "mitigation": {"type": "string"},
+      "probability": {"type": "string", "enum": ["low", "medium", "high"]}
+    },
+    "required": ["type", "severity", "description"],
+    "additionalProperties": false
+  }
+}
+```
+
+### Finding
+```json
+{
+  "Finding": {
+    "type": "object",
+    "properties": {
+      "file": {"type": "string"},
+      "line": {"type": "integer", "minimum": 1},
+      "severity": {"type": "string", "enum": ["low", "medium", "high"]},
+      "rule_id": {"type": "string"},
+      "rule_version": {"type": "string"},
+      "message": {"type": "string", "minLength": 10},
+      "category": {"type": "string", "enum": ["security", "performance", "quality", "style"]},
+      "fix_suggestion": {"type": "string"},
+      "test_suggestion": {"type": "string"}
+    },
+    "required": ["file", "line", "severity", "rule_id", "rule_version", "message", "category"],
+    "additionalProperties": false
+  }
+}
+```
+
+### Mismatch
+```json
+{
+  "Mismatch": {
+    "type": "object",
+    "properties": {
+      "type": {"type": "string", "enum": ["missing", "outdated", "inconsistent"]},
+      "target": {"type": "string"},
+      "ref_evidence": {"type": "string"},
+      "patch_suggestion": {"type": "string"},
+      "severity": {"type": "string", "enum": ["low", "medium", "high"]},
+      "affected_apis": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    },
+    "required": ["type", "target", "ref_evidence", "severity"],
+    "additionalProperties": false
+  }
+}
+```
+
+### DDLChange
+```json
+{
+  "DDLChange": {
+    "type": "object",
+    "properties": {
+      "type": {"type": "string", "enum": ["create", "alter", "drop"]},
+      "table": {"type": "string"},
+      "column": {"type": "string"},
+      "sql": {"type": "string"},
+      "impact": {"type": "string", "enum": ["low", "medium", "high"]},
+      "affected_queries": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    },
+    "required": ["type", "table", "sql", "impact"],
+    "additionalProperties": false
+  }
+}
+```
+
+### OpsGuide
+```json
+{
+  "OpsGuide": {
+    "type": "object",
+    "properties": {
+      "pre_deployment": {
+        "type": "array",
+        "items": {"type": "string"},
+        "minItems": 0
+      },
+      "deployment_steps": {
+        "type": "array",
+        "items": {"type": "string"},
+        "minItems": 1
+      },
+      "post_deployment": {
+        "type": "array",
+        "items": {"type": "string"},
+        "minItems": 0
+      },
+      "rollback_procedure": {
+        "type": "array",
+        "items": {"type": "string"},
+        "minItems": 0
+      }
+    },
+    "required": ["deployment_steps"],
+    "additionalProperties": false
+  }
+}
+```
+
+## 4. 최종 리포트 모델
+
+### FinalReport
+```json
+{
+  "FinalReport": {
+    "type": "object",
+    "properties": {
+      "id": {"type": "string", "format": "uuid"},
+      "pr_id": {"type": "string", "format": "uuid"},
+      "repo_id": {"type": "string", "format": "uuid"},
+      "generated_at": {"type": "string", "format": "date-time"},
+      "versions": {
+        "type": "object",
+        "properties": {
+          "agents": {"type": "object"},
+          "tools": {"type": "object"},
+          "rules": {"type": "object"}
+        }
+      },
+      "summary": {"$ref": "#/components/schemas/DiffSummary"},
+      "code_review": {"$ref": "#/components/schemas/CodeReviewResult"},
+      "docs_consistency": {"$ref": "#/components/schemas/DocsConsistencyResult"},
+      "schema_analysis": {"$ref": "#/components/schemas/SchemaAnalysisResult"},
+      "quality_grade": {"type": "string", "enum": ["A", "B", "C", "D"]},
+      "blocking_issues": {
+        "type": "array",
+        "items": {"type": "string"}
+      },
+      "warning_issues": {
+        "type": "array",
+        "items": {"type": "string"}
+      },
+      "recommendations": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    },
+    "required": ["id", "pr_id", "repo_id", "generated_at", "quality_grade"],
+    "additionalProperties": false
+  }
+}
+```
+
+# 데이터 검증 규칙
+
+## 필수 필드 검증
+- 모든 필수 필드는 null이나 undefined가 될 수 없음
+- 문자열 필드는 최소 길이 제한 적용
+- 숫자 필드는 범위 검증 적용
+
+## 참조 무결성
+- 외래 키 참조는 반드시 존재하는 레코드를 가리켜야 함
+- 삭제 시 연관된 레코드 처리 방안 명시
+
+## 데이터 타입 검증
+- UUID 형식 검증 (RFC 4122 준수)
+- 날짜/시간 형식 검증 (ISO 8601 준수)
+- 이메일, URL 등 특수 형식 검증
+
+# 스키마 마이그레이션
+
+## 버전 호환성
+- 하위 호환성이 깨지는 변경은 새로운 스키마 버전으로 관리
+- 기존 데이터와의 호환성을 위한 변환 로직 제공
+- 점진적 마이그레이션 지원
+
+## 변경 감지
+- 스키마 변경사항을 자동으로 감지하고 기록
+- 영향받는 데이터와 마이그레이션 필요성 자동 분석
+- 마이그레이션 실행 계획 자동 생성

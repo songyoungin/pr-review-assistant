@@ -1,19 +1,569 @@
 ---
-description: 품질 게이트(자동 차단/경고 조건)와 등급 정책.
-alwaysApply: false
+description: 코드 리뷰, 문서 일관성, 스키마 변경, 테스트 커버리지를 포함한 품질 게이트 규칙
+alwaysApply: true
 ---
 
-# 등급 산정(A~D)
-- A: high severity 0, medium <=2, 문서 불일치 0, 스키마 브레이킹 0
-- B: high 0, medium <=5, 문서 불일치 <=2
-- C: high <=1 또는 스키마 브레이킹 1
-- D: 그 외
+# 품질 게이트 개요
 
-# 차단 규칙(MUST block)
-- 보안 high 발견 ≥1
-- 스키마 브레이킹(롤백 없음) ≥1
-- 공개 API 변경인데 문서 패치 제안 미생성
-- 테스트 커버리지 순감 > 5%p AND 핵심 모듈 변경
+## 목적
+PRD의 성공 지표(KPI) 달성을 위해 자동화된 품질 검증을 수행하고, 리스크가 높은 변경사항을 사전에 차단하여 시스템 안정성을 보장한다.
+
+## 핵심 원칙
+- **자동화**: 수동 검토 없이 자동으로 품질 평가
+- **투명성**: 모든 평가 기준과 결과를 명확히 제시
+- **일관성**: 동일한 기준으로 모든 PR을 평가
+- **점진적 개선**: 품질 기준을 지속적으로 개선
+
+# 품질 등급 체계
+
+## 등급 정의 (A~D)
+
+### A등급 (Excellent)
+- **high severity 이슈**: 0개
+- **medium severity 이슈**: ≤2개
+- **문서 불일치**: 0개
+- **스키마 브레이킹 체인지**: 0개
+- **테스트 커버리지**: ≥90%
+- **성능 기준**: 모든 성능 임계값 만족
+
+### B등급 (Good)
+- **high severity 이슈**: 0개
+- **medium severity 이슈**: ≤5개
+- **문서 불일치**: ≤2개
+- **스키마 브레이킹 체인지**: 0개
+- **테스트 커버리지**: ≥80%
+- **성능 기준**: 주요 성능 임계값 만족
+
+### C등급 (Fair)
+- **high severity 이슈**: ≤1개
+- **스키마 브레이킹 체인지**: ≤1개
+- **문서 불일치**: ≤5개
+- **테스트 커버리지**: ≥70%
+- **성능 기준**: 기본 성능 임계값 만족
+
+### D등급 (Poor)
+- **high severity 이슈**: ≥2개
+- **스키마 브레이킹 체인지**: ≥2개
+- **문서 불일치**: ≥6개
+- **테스트 커버리지**: <70%
+- **성능 기준**: 성능 임계값 미달
+
+# 차단 규칙 (MUST Block)
+
+## 보안 관련 차단
+```python
+# 보안 high 발견 시 즉시 차단
+SECURITY_BLOCKING_RULES = {
+    "SEC001": "SQL Injection 취약점",
+    "SEC002": "XSS 취약점",
+    "SEC003": "인증 우회 취약점",
+    "SEC004": "권한 상승 취약점",
+    "SEC005": "민감 정보 노출",
+    "SEC006": "암호화 키 하드코딩",
+    "SEC007": "안전하지 않은 직렬화",
+    "SEC008": "CSRF 보호 누락",
+    "SEC009": "Rate Limiting 누락",
+    "SEC010": "입력 검증 누락"
+}
+
+def check_security_blocking(findings: List[Finding]) -> List[str]:
+    """보안 차단 조건 검사"""
+    blocking_issues = []
+
+    for finding in findings:
+        if (finding.category == "security" and
+            finding.severity == "high" and
+            finding.rule_id in SECURITY_BLOCKING_RULES):
+            blocking_issues.append(
+                f"{finding.rule_id}: {finding.message} "
+                f"(파일: {finding.file}:{finding.line})"
+            )
+
+    return blocking_issues
+```
+
+## 스키마 브레이킹 체인지 차단
+```python
+# 롤백 불가능한 스키마 변경 시 차단
+SCHEMA_BLOCKING_RULES = {
+    "SCHEMA001": "테이블 삭제 (DROP TABLE)",
+    "SCHEMA002": "컬럼 삭제 (DROP COLUMN)",
+    "SCHEMA003": "제약 조건 삭제",
+    "SCHEMA004": "인덱스 삭제",
+    "SCHEMA005": "데이터 타입 축소 변경",
+    "SCHEMA006": "NOT NULL 제약 추가 (기존 NULL 데이터 존재)",
+    "SCHEMA007": "UNIQUE 제약 추가 (기존 중복 데이터 존재)"
+}
+
+def check_schema_blocking(schema_changes: List[DDLChange]) -> List[str]:
+    """스키마 차단 조건 검사"""
+    blocking_issues = []
+
+    for change in schema_changes:
+        if change.impact == "high" and change.type in ["drop", "alter"]:
+            # 롤백 계획이 없는 경우 차단
+            if not has_rollback_plan(change):
+                blocking_issues.append(
+                    f"스키마 브레이킹 체인지: {change.description} "
+                    f"(롤백 계획 없음)"
+                )
+
+    return blocking_issues
+```
+
+## 문서 일관성 차단
+```python
+# 공개 API 변경인데 문서 패치 제안 미생성 시 차단
+def check_docs_blocking(
+    api_changes: List[APICall],
+    doc_mismatches: List[Mismatch]
+) -> List[str]:
+    """문서 일관성 차단 조건 검사"""
+    blocking_issues = []
+
+    # 공개 API 변경사항 식별
+    public_api_changes = [
+        change for change in api_changes
+        if change.visibility == "public"
+    ]
+
+    # 문서 패치 제안이 없는 변경사항 식별
+    for api_change in public_api_changes:
+        has_patch = any(
+            mismatch.patch_suggestion
+            for mismatch in doc_mismatches
+            if mismatch.target == api_change.endpoint
+        )
+
+        if not has_patch:
+            blocking_issues.append(
+                f"문서 패치 제안 누락: {api_change.endpoint} "
+                f"({api_change.method})"
+            )
+
+    return blocking_issues
+```
+
+## 테스트 커버리지 차단
+```python
+# 핵심 모듈 변경 시 테스트 커버리지 순감 제한
+def check_test_coverage_blocking(
+    coverage_change: float,
+    changed_modules: List[str],
+    core_modules: Set[str]
+) -> List[str]:
+    """테스트 커버리지 차단 조건 검사"""
+    blocking_issues = []
+
+    # 핵심 모듈 변경 여부 확인
+    has_core_module_changes = any(
+        module in core_modules for module in changed_modules
+    )
+
+    # 커버리지 순감이 5%p 초과이고 핵심 모듈 변경인 경우 차단
+    if coverage_change < -5.0 and has_core_module_changes:
+        blocking_issues.append(
+            f"테스트 커버리지 순감: {abs(coverage_change):.1f}%p "
+            f"(핵심 모듈 변경과 함께 발생)"
+        )
+
+    return blocking_issues
+```
+
+# 경고 규칙 (SHOULD Warn)
+
+## 대규모 변경 경고
+```python
+# 대규모 파일 변경 시 경고
+def check_large_changes_warning(
+    changed_files: List[ChangedFile],
+    test_changes: List[ChangedFile]
+) -> List[str]:
+    """대규모 변경 경고 검사"""
+    warnings = []
+
+    for file in changed_files:
+        # 2k 라인 이상 변경된 파일
+        if file.lines_changed > 2000:
+            # 테스트 파일 변경 여부 확인
+            has_test_changes = any(
+                test_file.path == file.path
+                for test_file in test_changes
+            )
+
+            if not has_test_changes:
+                warnings.append(
+                    f"대규모 변경 경고: {file.path} "
+                    f"({file.lines_changed} 라인 변경, 테스트 변경 없음)"
+                )
+
+    return warnings
+```
+
+## 성능 리스크 경고
+```python
+# 성능 관련 리스크 경고
+PERFORMANCE_WARNING_RULES = {
+    "PERF001": "N+1 쿼리 패턴",
+    "PERF002": "고비용 루프 (O(n²) 이상)",
+    "PERF003": "메모리 누수 가능성",
+    "PERF004": "동기 블로킹 호출",
+    "PERF005": "대용량 데이터 처리 (10MB 이상)",
+    "PERF006": "비효율적인 알고리즘",
+    "PERF007": "캐시 미사용",
+    "PERF008": "불필요한 네트워크 호출"
+}
+
+def check_performance_warnings(findings: List[Finding]) -> List[str]:
+    """성능 경고 검사"""
+    warnings = []
+
+    for finding in findings:
+        if (finding.category == "performance" and
+            finding.severity in ["medium", "high"] and
+            finding.rule_id in PERFORMANCE_WARNING_RULES):
+            warnings.append(
+                f"성능 경고: {finding.rule_id} - {finding.message} "
+                f"(파일: {finding.file}:{finding.line})"
+            )
+
+    return warnings
+```
+
+## 의존성 보안 경고
+```python
+# 보안 취약점이 있는 의존성 경고
+def check_dependency_security_warnings(
+    security_report: Dict[str, Any]
+) -> List[str]:
+    """의존성 보안 경고 검사"""
+    warnings = []
+
+    for vuln in security_report.get("vulnerabilities", []):
+        if vuln["severity"] in ["medium", "high"]:
+            warnings.append(
+                f"의존성 보안 경고: {vuln['package']} "
+                f"({vuln['severity']} - {vuln['description']})"
+            )
+
+    return warnings
+```
+
+# 품질 점수 계산
+
+## 종합 품질 점수
+```python
+def calculate_quality_score(
+    code_review: CodeReviewResult,
+    docs_consistency: DocsConsistencyResult,
+    schema_analysis: SchemaAnalysisResult,
+    test_coverage: float
+) -> Dict[str, Any]:
+    """종합 품질 점수 계산"""
+
+    # 코드 품질 점수 (40%)
+    code_quality = (
+        code_review.quality_score * 0.4 +
+        code_review.security_score * 0.3 +
+        code_review.performance_score * 0.3
+    )
+
+    # 문서 일관성 점수 (20%)
+    docs_score = docs_consistency.score * 0.2
+
+    # 스키마 품질 점수 (20%)
+    schema_score = schema_analysis.score * 0.2
+
+    # 테스트 커버리지 점수 (20%)
+    coverage_score = min(test_coverage, 100) * 0.2
+
+    # 종합 점수
+    total_score = code_quality + docs_score + schema_score + coverage_score
+
+    # 등급 결정
+    if total_score >= 90:
+        grade = "A"
+    elif total_score >= 80:
+        grade = "B"
+    elif total_score >= 70:
+        grade = "C"
+    else:
+        grade = "D"
+
+    return {
+        "total_score": round(total_score, 2),
+        "grade": grade,
+        "breakdown": {
+            "code_quality": round(code_quality, 2),
+            "docs_consistency": round(docs_score, 2),
+            "schema_quality": round(schema_score, 2),
+            "test_coverage": round(coverage_score, 2)
+        }
+    }
+```
+
+## 에이전트별 점수 가중치
+```python
+# 에이전트별 점수 가중치
+AGENT_WEIGHTS = {
+    "diff_summarizer": 0.1,      # 10%
+    "code_reviewer": 0.4,        # 40%
+    "docs_consistency_checker": 0.2,  # 20%
+    "schema_change_analyst": 0.2,     # 20%
+    "test_coverage": 0.1         # 10%
+}
+
+def calculate_weighted_score(
+    agent_scores: Dict[str, float]
+) -> float:
+    """가중치가 적용된 점수 계산"""
+    weighted_score = 0.0
+
+    for agent, score in agent_scores.items():
+        weight = AGENT_WEIGHTS.get(agent, 0.0)
+        weighted_score += score * weight
+
+    return weighted_score
+```
+
+# 품질 게이트 실행
+
+## 게이트 실행 엔진
+```python
+class QualityGateEngine:
+    """품질 게이트 실행 엔진"""
+
+    def __init__(self, config: QualityGateConfig):
+        self.config = config
+        self.blocking_rules = []
+        self.warning_rules = []
+
+    async def evaluate_pr(
+        self,
+        code_review: CodeReviewResult,
+        docs_consistency: DocsConsistencyResult,
+        schema_analysis: SchemaAnalysisResult,
+        test_coverage: float
+    ) -> QualityGateResult:
+        """PR 품질 평가"""
+
+        # 차단 조건 검사
+        blocking_issues = await self._check_blocking_conditions(
+            code_review, docs_consistency, schema_analysis, test_coverage
+        )
+
+        # 경고 조건 검사
+        warning_issues = await self._check_warning_conditions(
+            code_review, docs_consistency, schema_analysis, test_coverage
+        )
+
+        # 품질 점수 계산
+        quality_score = calculate_quality_score(
+            code_review, docs_consistency, schema_analysis, test_coverage
+        )
+
+        # 게이트 통과 여부 결정
+        passed = len(blocking_issues) == 0
+
+        return QualityGateResult(
+            passed=passed,
+            grade=quality_score["grade"],
+            score=quality_score["total_score"],
+            blocking_issues=blocking_issues,
+            warning_issues=warning_issues,
+            breakdown=quality_score["breakdown"]
+        )
+
+    async def _check_blocking_conditions(
+        self,
+        code_review: CodeReviewResult,
+        docs_consistency: DocsConsistencyResult,
+        schema_analysis: SchemaAnalysisResult,
+        test_coverage: float
+    ) -> List[str]:
+        """차단 조건 검사"""
+        blocking_issues = []
+
+        # 보안 검사
+        blocking_issues.extend(
+            check_security_blocking(code_review.findings)
+        )
+
+        # 스키마 검사
+        blocking_issues.extend(
+            check_schema_blocking(schema_analysis.ddl_changes)
+        )
+
+        # 문서 일관성 검사
+        blocking_issues.extend(
+            check_docs_blocking(
+                code_review.api_changes,
+                docs_consistency.mismatches
+            )
+        )
+
+        # 테스트 커버리지 검사
+        blocking_issues.extend(
+            check_test_coverage_blocking(
+                code_review.coverage_change,
+                code_review.changed_modules,
+                self.config.core_modules
+            )
+        )
+
+        return blocking_issues
+
+    async def _check_warning_conditions(
+        self,
+        code_review: CodeReviewResult,
+        docs_consistency: DocsConsistencyResult,
+        schema_analysis: SchemaAnalysisResult,
+        test_coverage: float
+    ) -> List[str]:
+        """경고 조건 검사"""
+        warning_issues = []
+
+        # 대규모 변경 경고
+        warning_issues.extend(
+            check_large_changes_warning(
+                code_review.changed_files,
+                code_review.test_changes
+            )
+        )
+
+        # 성능 경고
+        warning_issues.extend(
+            check_performance_warnings(code_review.findings)
+        )
+
+        # 의존성 보안 경고
+        if hasattr(code_review, 'dependency_security'):
+            warning_issues.extend(
+                check_dependency_security_warnings(
+                    code_review.dependency_security
+                )
+            )
+
+        return warning_issues
+```
+
+# 품질 게이트 설정
+
+## 설정 파일 구조
+```yaml
+# config/quality_gates.yaml
+quality_gates:
+  # 차단 규칙 설정
+  blocking:
+    security:
+      enabled: true
+      severity_threshold: "high"
+      rules: ["SEC001", "SEC002", "SEC003", "SEC004", "SEC005"]
+
+    schema:
+      enabled: true
+      require_rollback_plan: true
+      blocking_changes: ["drop", "alter_breaking"]
+
+    docs:
+      enabled: true
+      require_patch_suggestion: true
+      public_api_only: true
+
+    test_coverage:
+      enabled: true
+      max_decrease: 5.0
+      core_modules: ["agents", "tools", "workflow"]
+
+  # 경고 규칙 설정
+  warnings:
+    large_changes:
+      enabled: true
+      line_threshold: 2000
+      require_test_changes: true
+
+    performance:
+      enabled: true
+      severity_threshold: "medium"
+      rules: ["PERF001", "PERF002", "PERF003"]
+
+    dependencies:
+      enabled: true
+      severity_threshold: "medium"
+
+  # 점수 가중치 설정
+  scoring:
+    code_quality: 0.4
+    docs_consistency: 0.2
+    schema_quality: 0.2
+    test_coverage: 0.1
+    diff_summary: 0.1
+
+  # 등급 임계값
+  grading:
+    A: 90
+    B: 80
+    C: 70
+    D: 0
+```
+
+# 품질 게이트 결과
+
+## 결과 모델
+```python
+@dataclass
+class QualityGateResult:
+    """품질 게이트 결과"""
+    passed: bool
+    grade: str
+    score: float
+    blocking_issues: List[str]
+    warning_issues: List[str]
+    breakdown: Dict[str, float]
+    evaluated_at: datetime = field(default_factory=datetime.utcnow)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """딕셔너리로 변환"""
+        return {
+            "passed": self.passed,
+            "grade": self.grade,
+            "score": self.score,
+            "blocking_issues": self.blocking_issues,
+            "warning_issues": self.warning_issues,
+            "breakdown": self.breakdown,
+            "evaluated_at": self.evaluated_at.isoformat()
+        }
+
+    def to_markdown(self) -> str:
+        """Markdown 형식으로 변환"""
+        status_icon = "✅" if self.passed else "❌"
+        status_text = "통과" if self.passed else "차단"
+
+        md = f"# 품질 게이트 결과 {status_icon}\n\n"
+        md += f"**상태**: {status_text}\n"
+        md += f"**등급**: {self.grade}\n"
+        md += f"**점수**: {self.score:.1f}/100\n\n"
+
+        if self.blocking_issues:
+            md += "## 차단 이슈 ❌\n\n"
+            for issue in self.blocking_issues:
+                md += f"- {issue}\n"
+            md += "\n"
+
+        if self.warning_issues:
+            md += "## 경고 이슈 ⚠️\n\n"
+            for issue in self.warning_issues:
+                md += f"- {issue}\n"
+            md += "\n"
+
+        md += "## 점수 세부사항\n\n"
+        for category, score in self.breakdown.items():
+            md += f"- **{category}**: {score:.1f}\n"
+
+        return md
+```
+
+이러한 품질 게이트 시스템을 통해 PRD의 성공 지표를 달성하고, 안정적이고 고품질의 시스템을 구축할 수 있습니다.
 
 # 경고 규칙(SHOULD warn)
 - 대규모 파일 변경(> 2k 라인)인데 테스트 변경 없음

@@ -1,29 +1,447 @@
 ---
-description: 툴 콜링 인터페이스(계약) 정의: Git/Diff, Parser, LLM, Static Analysis, Docs/Schema 헬퍼.
-alwaysApply: false
+description: 툴 인터페이스 공통 규칙
+alwaysApply: true
 ---
 
-# 공통 규칙
-- 모든 툴은 동기/비동기 인터페이스를 제공(MAY). 대용량은 비동기 권장.
-- 입력/출력은 JSON(텍스트 대량은 경로 참조).
-- 툴은 "id, version, capabilities"를 노출하여 호환성 검증.
+# 툴 인터페이스 공통 규칙
 
-# 툴 계약(요약; 함수명은 예시)
-- GitTool
-  get_pr_context(repo, pr_number?) -> {base, head, files[], title, url}
-  get_diff(base, head, unified=true) -> {patch_path, files_path}
-- DiffParser
-  parse_unified_diff(patch_path) -> {files: [{path,hunks:[{start,len,added,removed}]}]}
-  extract_api_changes(files[]) -> {rest[], grpc[], graphql[], cli[], env[], config[]}
-- CodeQLTool|StaticAnalyzer(MAY)
-  run(paths[], config) -> {findings[]}
-- DocMatcher
-  match_api_to_docs(api_changes, doc_paths[]) -> {mismatches[], patches?}
-- SchemaTool
-  detect_changes(diff) -> {ddl_changes[], breaking[]}
-  generate_ops_guide(changes) -> {pre,steps,post,rollback}
-- LLMTool
-  complete(messages[], schema?) -> {content, citations?, usage}
+## 기본 원칙
+- 모든 툴은 동기/비동기 인터페이스를 제공 (MAY)
+- 대용량 처리 작업은 비동기 실행 권장
+- 입력/출력은 JSON 형식 (대용량 텍스트는 파일 경로 참조)
+- 툴은 "id, version, capabilities"를 노출하여 호환성 검증
+
+## 툴 메타데이터 스키마
+```json
+{
+  "ToolMetadata": {
+    "id": "string",
+    "name": "string",
+    "version": "string",
+    "capabilities": ["string"],
+    "async_support": "boolean",
+    "timeout_ms": "number",
+    "max_input_size": "number?",
+    "rate_limit": "number?"
+  }
+}
+```
+
+## 공통 응답 형식
+```json
+{
+  "ToolResponse": {
+    "success": "boolean",
+    "data": "object?",
+    "error": "string?",
+    "error_code": "string?",
+    "execution_time_ms": "number",
+    "metadata": "ToolMetadata"
+  }
+}
+```
+
+# Git 및 Diff 관련 툴
+
+## GitTool
+### 기능
+- PR 컨텍스트 조회 및 diff 생성
+- 브랜치 정보 및 커밋 히스토리 분석
+- 파일 변경 상태 및 통계 제공
+
+### 메서드
+```python
+class GitTool:
+    async def get_pr_context(
+        self,
+        repo: str,
+        pr_number: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """PR 컨텍스트 조회"""
+        pass
+
+    async def get_diff(
+        self,
+        base: str,
+        head: str,
+        unified: bool = True
+    ) -> Dict[str, Any]:
+        """두 브랜치 간 diff 생성"""
+        pass
+
+    async def get_file_stats(
+        self,
+        base: str,
+        head: str
+    ) -> Dict[str, Any]:
+        """파일별 변경 통계"""
+        pass
+```
+
+### 출력 스키마
+```json
+{
+  "PRContext": {
+    "base": "string",
+    "head": "string",
+    "files": ["string"],
+    "title": "string",
+    "url": "string",
+    "author": "string",
+    "created_at": "ISO8601",
+    "updated_at": "ISO8601"
+  },
+  "DiffResult": {
+    "patch_path": "string",
+    "files_path": "string",
+    "total_lines": "number",
+    "added_lines": "number",
+    "removed_lines": "number",
+    "changed_files": "number"
+  }
+}
+```
+
+## DiffParser
+### 기능
+- Unified diff 파싱 및 구조화
+- API 변경사항 자동 감지
+- 파일 타입별 변경 분석
+
+### 메서드
+```python
+class DiffParser:
+    async def parse_unified_diff(
+        self,
+        patch_path: str
+    ) -> Dict[str, Any]:
+        """Unified diff 파싱"""
+        pass
+
+    async def extract_api_changes(
+        self,
+        files: List[str]
+    ) -> Dict[str, Any]:
+        """API 변경사항 추출"""
+        pass
+
+    async def categorize_changes(
+        self,
+        diff_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """변경사항 카테고리화"""
+        pass
+```
+
+### 출력 스키마
+```json
+{
+  "ParsedDiff": {
+    "files": [{
+      "path": "string",
+      "hunks": [{
+        "start_line": "number",
+        "end_line": "number",
+        "added_lines": "number",
+        "removed_lines": "number",
+        "context": "string"
+      }]
+    }]
+  },
+  "APIChanges": {
+    "rest": ["APICall"],
+    "grpc": ["GRPCCall"],
+    "graphql": ["GraphQLCall"],
+    "cli": ["CLICommand"],
+    "env": ["EnvVar"],
+    "config": ["ConfigKey"]
+  }
+}
+```
+
+# 코드 분석 툴
+
+## StaticAnalyzer
+### 기능
+- 정적 코드 분석 및 보안 취약점 탐지
+- 코드 품질 메트릭 계산
+- 성능 이슈 및 안티패턴 감지
+
+### 메서드
+```python
+class StaticAnalyzer:
+    async def run_analysis(
+        self,
+        paths: List[str],
+        config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """정적 분석 실행"""
+        pass
+
+    async def get_security_issues(
+        self,
+        code_path: str
+    ) -> List[Dict[str, Any]]:
+        """보안 이슈 탐지"""
+        pass
+
+    async def get_performance_issues(
+        self,
+        code_path: str
+    ) -> List[Dict[str, Any]]:
+        """성능 이슈 탐지"""
+        pass
+```
+
+### 출력 스키마
+```json
+{
+  "AnalysisResult": {
+    "findings": [{
+      "file": "string",
+      "line": "number",
+      "severity": "low|medium|high",
+      "rule_id": "string",
+      "message": "string",
+      "category": "security|performance|quality|style",
+      "fix_suggestion": "string?"
+    }],
+    "metrics": {
+      "complexity": "number",
+      "maintainability": "number",
+      "security_score": "number",
+      "performance_score": "number"
+    }
+  }
+}
+```
+
+## CodeQLTool (선택적)
+### 기능
+- GitHub CodeQL 기반 고급 보안 분석
+- 데이터 플로우 및 제어 플로우 분석
+- 커스텀 쿼리 실행 지원
+
+### 메서드
+```python
+class CodeQLTool:
+    async def setup_database(
+        self,
+        repo_path: str
+    ) -> str:
+        """CodeQL 데이터베이스 설정"""
+        pass
+
+    async def run_query(
+        self,
+        query_path: str,
+        db_path: str
+    ) -> Dict[str, Any]:
+        """쿼리 실행"""
+        pass
+```
+
+# 문서 및 스키마 분석 툴
+
+## DocMatcher
+### 기능
+- API 변경사항과 문서 일치성 검사
+- 누락된 문서 자동 감지
+- 문서 패치 제안 생성
+
+### 메서드
+```python
+class DocMatcher:
+    async def match_api_to_docs(
+        self,
+        api_changes: Dict[str, Any],
+        doc_paths: List[str]
+    ) -> Dict[str, Any]:
+        """API와 문서 매칭"""
+        pass
+
+    async def find_missing_docs(
+        self,
+        api_changes: Dict[str, Any]
+    ) -> List[str]:
+        """누락된 문서 탐지"""
+        pass
+
+    async def generate_patch_suggestions(
+        self,
+        mismatches: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """패치 제안 생성"""
+        pass
+```
+
+### 출력 스키마
+```json
+{
+  "DocMatchingResult": {
+    "mismatches": [{
+      "type": "missing|outdated|inconsistent",
+      "target": "string",
+      "ref_evidence": "string",
+      "patch_suggestion": "string?",
+      "severity": "low|medium|high"
+    }],
+    "score": "number",
+    "coverage_percentage": "number"
+  }
+}
+```
+
+## SchemaTool
+### 기능
+- 데이터베이스 스키마 변경 감지
+- 브레이킹 체인지 분석
+- 운영 가이드 자동 생성
+
+### 메서드
+```python
+class SchemaTool:
+    async def detect_changes(
+        self,
+        diff: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """스키마 변경 감지"""
+        pass
+
+    async def analyze_breaking_changes(
+        self,
+        changes: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """브레이킹 체인지 분석"""
+        pass
+
+    async def generate_ops_guide(
+        self,
+        changes: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """운영 가이드 생성"""
+        pass
+```
+
+### 출력 스키마
+```json
+{
+  "SchemaAnalysisResult": {
+    "ddl_changes": [{
+      "type": "create|alter|drop",
+      "table": "string",
+      "column": "string?",
+      "sql": "string",
+      "impact": "low|medium|high"
+    }],
+    "breaking": [{
+      "type": "column_removal|type_change|constraint_change",
+      "description": "string",
+      "affected_queries": ["string"],
+      "migration_strategy": "string"
+    }],
+    "ops_guide": {
+      "pre_deployment": ["string"],
+      "deployment_steps": ["string"],
+      "post_deployment": ["string"],
+      "rollback_procedure": ["string"]
+    }
+  }
+}
+```
+
+# LLM 통합 툴
+
+## LLMTool
+### 기능
+- 다양한 LLM 제공자 통합
+- 프롬프트 템플릿 관리
+- 함수 호출 및 스트리밍 지원
+
+### 메서드
+```python
+class LLMTool:
+    async def complete(
+        self,
+        messages: List[Dict[str, Any]],
+        schema: Optional[Dict[str, Any]] = None,
+        model: str = "gpt-4",
+        temperature: float = 0.0
+    ) -> Dict[str, Any]:
+        """LLM 완성 요청"""
+        pass
+
+    async def function_call(
+        self,
+        messages: List[Dict[str, Any]],
+        functions: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """함수 호출"""
+        pass
+
+    async def stream_complete(
+        self,
+        messages: List[Dict[str, Any]]
+    ) -> AsyncGenerator[str, None]:
+        """스트리밍 완성"""
+        pass
+```
+
+### 출력 스키마
+```json
+{
+  "LLMResponse": {
+    "content": "string",
+    "citations": ["string"]?,
+    "usage": {
+      "prompt_tokens": "number",
+      "completion_tokens": "number",
+      "total_tokens": "number"
+    },
+    "function_calls": ["FunctionCall"]?
+  }
+}
+```
+
+# 성능 및 리소스 가드레일
+
+## 시간 제한
+- **단일 툴 호출**: 30초 기본
+- **LLM 호출**: 60초 기본
+- **전체 파이프라인**: 5분 (PRD NFR-1 기준)
+
+## 토큰 및 메모리 제한
+- **LLM 단일 호출**: 16k 토큰 상한 (기본)
+- **대용량 처리**: 필요 시 함수 호출로 분할
+- **파일당 최대 라인**: 10k 라인 초과 시 샘플링/요약
+
+## 캐싱 및 재사용
+- 동일 입력에 대한 결과 캐싱
+- 툴 버전별 캐시 무효화
+- 부분 결과 재사용으로 성능 최적화
+
+# 툴 등록 및 관리
+
+## 툴 레지스트리
+```python
+class ToolRegistry:
+    def register_tool(self, tool: BaseTool) -> None:
+        """툴 등록"""
+        pass
+
+    def get_tool(self, tool_id: str) -> Optional[BaseTool]:
+        """툴 조회"""
+        pass
+
+    def list_tools(self) -> List[ToolMetadata]:
+        """등록된 툴 목록"""
+        pass
+```
+
+## 툴 버전 관리
+- 각 툴은 시맨틱 버저닝 준수
+- 호환성 검증을 위한 버전 체크
+- 툴 업데이트 시 자동 마이그레이션 지원
 
 # 시간/자원 한도(가드레일)
 - 단일 LLM 호출 토큰 상한: 16k(기본), 필요 시 함수-호출로 분할

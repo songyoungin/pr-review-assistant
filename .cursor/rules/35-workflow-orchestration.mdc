@@ -1,0 +1,470 @@
+---
+description: 워크플로 오케스트레이션 규칙
+---
+
+# 워크플로 설계 원칙
+
+## 핵심 원칙
+- **병렬 처리**: 독립적인 에이전트는 동시 실행으로 처리 시간 단축
+- **에러 격리**: 한 에이전트의 실패가 전체 파이프라인을 중단시키지 않음
+- **상태 추적**: 각 단계의 진행 상황과 결과를 실시간으로 모니터링
+- **재시도 정책**: 일시적 오류에 대한 지능적 재시도 메커니즘
+
+## 성능 목표
+- **기본 처리**: 2k~5k 변경 라인 (평균 2분 이내)
+- **대용량 처리**: 10k+ 라인 시 샘플링 + 근거 라인 보존
+- **전체 타임아웃**: 5분 (PRD NFR-1 기준)
+
+# 워크플로 단계별 정의
+
+## 1. 초기화 단계 (Initialization)
+
+### 목표
+- PR 컨텍스트 및 diff 생성
+- 에이전트 및 툴 초기화
+- 실행 환경 검증
+
+### 세부 단계
+```python
+async def initialize_workflow(pr_url: str) -> OrchestratorState:
+    """워크플로 초기화"""
+    # 1. PR 정보 파싱
+    repo_info = parse_pr_url(pr_url)
+
+    # 2. Git 툴을 통한 PR 컨텍스트 조회
+    pr_context = await git_tool.get_pr_context(
+        repo=repo_info.repo,
+        pr_number=repo_info.pr_number
+    )
+
+    # 3. Diff 생성
+    diff_result = await git_tool.get_diff(
+        base=pr_context.base,
+        head=pr_context.head
+    )
+
+    # 4. 상태 초기화
+    state = OrchestratorState(
+        repo=repo_info,
+        pr=pr_context,
+        diff=diff_result,
+        execution=ExecutionStatus(
+            started_at=datetime.utcnow(),
+            status="running"
+        )
+    )
+
+    # 5. 실행 환경 검증
+    await validate_execution_environment(state)
+
+    return state
+```
+
+### 검증 사항
+- Git 저장소 접근 권한
+- 필요한 툴들의 가용성
+- 메모리 및 디스크 공간
+- 네트워크 연결 상태
+
+## 2. 변경 요약 단계 (Diff Summarization)
+
+### 목표
+- 변경사항의 핵심 포인트 도출
+- 리스크 및 영향도 평가
+- 배포 전략 수립을 위한 정보 제공
+
+### 실행 흐름
+```python
+async def execute_diff_summarization(state: OrchestratorState) -> DiffSummary:
+    """변경 요약 실행"""
+    try:
+        # 1. DiffSummarizer 에이전트 실행
+        summary = await diff_summarizer.analyze(
+            diff_path=state.diff.unified_patch_path,
+            files_path=state.diff.changed_files_path,
+            max_highlights=5,
+            include_risks=True
+        )
+
+        # 2. 결과 검증
+        validate_diff_summary(summary)
+
+        # 3. 상태 업데이트
+        state.outputs.summary = summary
+        state.execution.agent_status["diff_summarizer"] = "completed"
+
+        return summary
+
+    except Exception as e:
+        # 에러 처리 및 부분 성공 표시
+        state.execution.agent_status["diff_summarizer"] = "failed"
+        state.execution.errors.append(f"DiffSummarizer: {str(e)}")
+        raise
+```
+
+### 출력 검증
+- TL;DR 길이 제한 (10-500자)
+- 하이라이트 개수 제한 (1-10개)
+- 리스크 정보 완성도
+- 배포 영향도 등급화
+
+## 3. 병렬 분석 단계 (Parallel Analysis)
+
+### 목표
+- CodeReviewer, DocsConsistencyChecker, SchemaChangeAnalyst 동시 실행
+- 각 에이전트의 독립성 보장
+- 전체 처리 시간 최소화
+
+### 실행 전략
+```python
+async def execute_parallel_analysis(state: OrchestratorState) -> None:
+    """병렬 분석 실행"""
+    # 1. 동시 실행할 태스크 정의
+    tasks = [
+        execute_code_review(state),
+        execute_docs_consistency_check(state),
+        execute_schema_analysis(state)
+    ]
+
+    # 2. 병렬 실행 및 결과 수집
+    results = await asyncio.gather(
+        *tasks,
+        return_exceptions=True
+    )
+
+    # 3. 결과 처리 및 상태 업데이트
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            # 에러 처리
+            handle_agent_error(state, i, result)
+        else:
+            # 성공 결과 처리
+            process_agent_result(state, i, result)
+
+    # 4. 전체 상태 업데이트
+    update_execution_status(state)
+```
+
+### 에러 격리 전략
+- 각 에이전트는 독립적인 컨테이너/프로세스에서 실행
+- 한 에이전트의 실패가 다른 에이전트에 영향 주지 않음
+- 부분 실패 시 해당 섹션만 경고 표기
+
+## 4. 결과 집계 단계 (Result Aggregation)
+
+### 목표
+- 모든 에이전트 결과를 통합
+- 품질 등급 계산
+- 최종 리포트 생성
+
+### 집계 로직
+```python
+async def aggregate_results(state: OrchestratorState) -> FinalReport:
+    """결과 집계 및 최종 리포트 생성"""
+    # 1. 품질 등급 계산
+    quality_grade = calculate_quality_grade(state)
+
+    # 2. 차단 이슈 식별
+    blocking_issues = identify_blocking_issues(state)
+
+    # 3. 경고 이슈 식별
+    warning_issues = identify_warning_issues(state)
+
+    # 4. 권장사항 생성
+    recommendations = generate_recommendations(state)
+
+    # 5. 최종 리포트 생성
+    final_report = FinalReport(
+        id=generate_uuid(),
+        pr_id=state.pr.id,
+        repo_id=state.repo.id,
+        generated_at=datetime.utcnow(),
+        versions=collect_versions(state),
+        summary=state.outputs.summary,
+        code_review=state.outputs.code_review,
+        docs_consistency=state.outputs.docs_consistency,
+        schema_analysis=state.outputs.schema_analysis,
+        quality_grade=quality_grade,
+        blocking_issues=blocking_issues,
+        warning_issues=warning_issues,
+        recommendations=recommendations
+    )
+
+    # 6. 상태 업데이트
+    state.outputs.final_report = final_report
+    state.execution.status = "completed"
+    state.execution.completed_at = datetime.utcnow()
+
+    return final_report
+```
+
+### 품질 등급 계산 규칙
+- **A등급**: high severity 0, medium ≤2, 문서 불일치 0, 스키마 브레이킹 0
+- **B등급**: high 0, medium ≤5, 문서 불일치 ≤2
+- **C등급**: high ≤1 또는 스키마 브레이킹 1
+- **D등급**: 그 외
+
+## 5. 출력 및 게시 단계 (Output & Publishing)
+
+### 목표
+- JSON/Markdown 리포트 생성
+- CI 파이프라인에 결과 게시
+- PR 코멘트 자동 생성
+
+### 출력 형식
+```python
+async def generate_outputs(state: OrchestratorState, final_report: FinalReport) -> None:
+    """출력 파일 생성"""
+    # 1. JSON 리포트 생성
+    json_path = f".reports/final_report_{state.pr.number}.json"
+    await save_json_report(final_report, json_path)
+
+    # 2. Markdown 리포트 생성
+    md_path = f".reports/final_report_{state.pr.number}.md"
+    await generate_markdown_report(final_report, md_path)
+
+    # 3. CI 아티팩트 업로드
+    await upload_ci_artifacts([json_path, md_path])
+
+    # 4. PR 코멘트 생성
+    await create_pr_comments(state, final_report)
+```
+
+# 상태 관리 및 모니터링
+
+## 상태 스냅샷
+```python
+@dataclass
+class OrchestratorState:
+    """오케스트레이터 상태"""
+    repo: Repository
+    pr: PullRequest
+    diff: Diff
+    outputs: Outputs
+    execution: ExecutionStatus
+
+    def to_dict(self) -> Dict[str, Any]:
+        """상태를 딕셔너리로 변환"""
+        return {
+            "repo": self.repo.__dict__,
+            "pr": self.pr.__dict__,
+            "diff": self.diff.__dict__,
+            "outputs": {
+                k: v.__dict__ if v else None
+                for k, v in self.outputs.__dict__.items()
+            },
+            "execution": self.execution.__dict__
+        }
+
+    def save_snapshot(self, path: str) -> None:
+        """상태 스냅샷 저장"""
+        with open(path, 'w') as f:
+            json.dump(self.to_dict(), f, indent=2, default=str)
+```
+
+## 진행 상황 모니터링
+```python
+class ProgressTracker:
+    """진행 상황 추적"""
+
+    def __init__(self):
+        self.steps = []
+        self.current_step = 0
+        self.start_time = time.time()
+
+    def add_step(self, name: str, estimated_duration: float):
+        """단계 추가"""
+        self.steps.append({
+            "name": name,
+            "estimated_duration": estimated_duration,
+            "status": "pending",
+            "started_at": None,
+            "completed_at": None,
+            "duration": None
+        })
+
+    def start_step(self, step_index: int):
+        """단계 시작"""
+        if 0 <= step_index < len(self.steps):
+            self.steps[step_index]["status"] = "running"
+            self.steps[step_index]["started_at"] = time.time()
+            self.current_step = step_index
+
+    def complete_step(self, step_index: int):
+        """단계 완료"""
+        if 0 <= step_index < len(self.steps):
+            self.steps[step_index]["status"] = "completed"
+            self.steps[step_index]["completed_at"] = time.time()
+            self.steps[step_index]["duration"] = (
+                self.steps[step_index]["completed_at"] -
+                self.steps[step_index]["started_at"]
+            )
+
+    def get_progress(self) -> Dict[str, Any]:
+        """진행 상황 요약"""
+        completed = sum(1 for step in self.steps if step["status"] == "completed")
+        total = len(self.steps)
+        elapsed = time.time() - self.start_time
+
+        return {
+            "completed_steps": completed,
+            "total_steps": total,
+            "progress_percentage": (completed / total) * 100 if total > 0 else 0,
+            "elapsed_time": elapsed,
+            "estimated_remaining": self._estimate_remaining_time(),
+            "current_step": self.current_step,
+            "steps": self.steps
+        }
+```
+
+# 에러 처리 및 복구
+
+## 에러 분류
+```python
+class ErrorHandler:
+    """에러 처리 및 복구"""
+
+    ERROR_TYPES = {
+        "E001": "Git 작업 실패",
+        "E002": "LLM 호출 실패",
+        "E003": "파일 파싱 실패",
+        "E004": "권한 부족",
+        "E005": "타임아웃",
+        "E006": "메모리 부족"
+    }
+
+    RETRYABLE_ERRORS = {"E001", "E002", "E005"}
+
+    def classify_error(self, error: Exception) -> str:
+        """에러 분류"""
+        if isinstance(error, GitError):
+            return "E001"
+        elif isinstance(error, LLMError):
+            return "E002"
+        elif isinstance(error, ParsingError):
+            return "E003"
+        elif isinstance(error, PermissionError):
+            return "E004"
+        elif isinstance(error, TimeoutError):
+            return "E005"
+        elif isinstance(error, MemoryError):
+            return "E006"
+        else:
+            return "E000"  # 알 수 없는 에러
+
+    def is_retryable(self, error_code: str) -> bool:
+        """재시도 가능 여부"""
+        return error_code in self.RETRYABLE_ERRORS
+
+    async def handle_error(self, error: Exception, context: str) -> ErrorResponse:
+        """에러 처리"""
+        error_code = self.classify_error(error)
+        retryable = self.is_retryable(error_code)
+
+        return ErrorResponse(
+            error_code=error_code,
+            message=str(error),
+            retryable=retryable,
+            context=context,
+            timestamp=datetime.utcnow()
+        )
+```
+
+## 재시도 정책
+```python
+class RetryPolicy:
+    """재시도 정책"""
+
+    def __init__(self, max_retries: int = 3, base_delay: float = 1.0):
+        self.max_retries = max_retries
+        self.base_delay = base_delay
+
+    async def execute_with_retry(
+        self,
+        func: Callable,
+        *args,
+        **kwargs
+    ) -> Any:
+        """재시도와 함께 함수 실행"""
+        last_error = None
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                last_error = e
+
+                if attempt < self.max_retries:
+                    # 지수 백오프
+                    delay = self.base_delay * (2 ** attempt)
+                    await asyncio.sleep(delay)
+                else:
+                    # 최대 재시도 횟수 초과
+                    break
+
+        # 모든 재시도 실패
+        raise last_error
+```
+
+# 워크플로 구성 및 확장
+
+## 플러그인 아키텍처
+```python
+class WorkflowPlugin:
+    """워크플로 플러그인 기본 클래스"""
+
+    def __init__(self, name: str, version: str):
+        self.name = name
+        self.version = version
+
+    async def before_execution(self, state: OrchestratorState) -> None:
+        """실행 전 처리"""
+        pass
+
+    async def after_execution(self, state: OrchestratorState) -> None:
+        """실행 후 처리"""
+        pass
+
+    def get_requirements(self) -> List[str]:
+        """필요한 의존성"""
+        return []
+
+    def is_compatible(self, workflow_version: str) -> bool:
+        """호환성 검사"""
+        return True
+```
+
+## 워크플로 설정
+```python
+@dataclass
+class WorkflowConfig:
+    """워크플로 설정"""
+    # 기본 설정
+    max_execution_time: float = 300.0  # 5분
+    enable_parallel_execution: bool = True
+    enable_caching: bool = True
+    cache_ttl: int = 3600  # 1시간
+
+    # 에이전트 설정
+    agents: Dict[str, AgentConfig] = field(default_factory=dict)
+
+    # 툴 설정
+    tools: Dict[str, ToolConfig] = field(default_factory=dict)
+
+    # 출력 설정
+    output_formats: List[str] = field(default_factory=lambda: ["json", "markdown"])
+    enable_ci_integration: bool = True
+    enable_pr_comments: bool = True
+
+    # 품질 게이트 설정
+    quality_gates: QualityGateConfig = field(default_factory=QualityGateConfig)
+
+    @classmethod
+    def from_file(cls, path: str) -> "WorkflowConfig":
+        """파일에서 설정 로드"""
+        with open(path, 'r') as f:
+            config_data = yaml.safe_load(f)
+        return cls(**config_data)
+```
+
+이러한 워크플로 설계를 통해 PRD의 요구사항을 충족하면서도 확장 가능하고 안정적인 시스템을 구축할 수 있습니다.
