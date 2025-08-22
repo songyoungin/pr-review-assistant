@@ -14,9 +14,11 @@ import ast
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from loguru import logger
+
+from ..base import BaseTool, ToolErrorCode, ToolEvidence, ToolResult
 
 
 @dataclass
@@ -80,19 +82,41 @@ class CodeMetrics:
     hardcoded_strings: list[tuple[int, str]]
 
 
+@dataclass
+class ASTAnalysisInput:
+    """Input data for AST analysis."""
+
+    file_path: str | None = None
+    source_code: str | None = None
+    directory_path: str | None = None
+
+
+@dataclass
+class ASTAnalysisOutput:
+    """AST analysis results."""
+
+    file_info: dict[str, Any] | None = None
+    functions: list[dict[str, Any]] | None = None
+    classes: list[dict[str, Any]] | None = None
+    imports: list[dict[str, Any]] | None = None
+    metrics: CodeMetrics | None = None
+    code_smells: dict[str, list[dict[str, Any]]] | None = None
+    summary: dict[str, Any] | None = None
+
+
 class ASTNodeVisitor(ast.NodeVisitor):
     """
-    Custom AST node visitor for analyzing Python code structure.
+    Python 코드 구조를 분석하기 위한 커스텀 AST 노드 방문자.
 
-    This visitor traverses the AST and collects information about:
-    - Functions and their complexity
-    - Classes and their methods
-    - Imports and their structure
-    - Code metrics and quality indicators
+    이 방문자는 AST를 순회하며 다음에 대한 정보를 수집합니다:
+    - 함수와 그들의 복잡성
+    - 클래스와 그들의 메서드
+    - import와 그들의 구조
+    - 코드 메트릭과 품질 지표
     """
 
     def __init__(self) -> None:
-        """Initialize the AST node visitor."""
+        """AST 노드 방문자 초기화."""
         self.functions: list[FunctionInfo] = []
         self.classes: list[ClassInfo] = []
         self.imports: list[ImportInfo] = []
@@ -101,9 +125,9 @@ class ASTNodeVisitor(ast.NodeVisitor):
         self.hardcoded_strings: list[tuple[int, str]] = []
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        """Visit function definition nodes."""
-        # Calculate complexity (simplified cyclomatic complexity)
-        complexity = 1  # Base complexity
+        """함수 정의 노드 방문."""
+        # 복잡성 계산 (간소화된 순환 복잡성)
+        complexity = 1  # 기본 복잡성
 
         for child in ast.walk(node):
             if isinstance(child, ast.If | ast.While | ast.For | ast.ExceptHandler):
@@ -111,10 +135,10 @@ class ASTNodeVisitor(ast.NodeVisitor):
             elif isinstance(child, ast.BoolOp):
                 complexity += len(child.values) - 1
 
-        # Extract arguments
+        # 인수 추출
         arguments = [arg.arg for arg in node.args.args]
 
-        # Extract decorators
+        # 데코레이터 추출
         decorators: list[str] = []
         for decorator in node.decorator_list:
             if isinstance(decorator, ast.Name):
@@ -125,11 +149,11 @@ class ASTNodeVisitor(ast.NodeVisitor):
                 else:
                     decorators.append(f"<complex>.{decorator.attr}")
 
-        # Check for return/yield statements
+        # return/yield 문 확인
         has_return = any(isinstance(n, ast.Return) for n in ast.walk(node))
         has_yield = any(isinstance(n, ast.Yield) for n in ast.walk(node))
 
-        # Extract docstring
+        # docstring 추출
         docstring = None
         if (
             node.body
@@ -156,9 +180,9 @@ class ASTNodeVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        """Visit async function definition nodes."""
-        # Calculate complexity (simplified cyclomatic complexity)
-        complexity = 1  # Base complexity
+        """비동기 함수 정의 노드 방문."""
+        # 복잡성 계산 (간소화된 순환 복잡성)
+        complexity = 1  # 기본 복잡성
 
         for child in ast.walk(node):
             if isinstance(child, ast.If | ast.While | ast.For | ast.ExceptHandler):
@@ -166,10 +190,10 @@ class ASTNodeVisitor(ast.NodeVisitor):
             elif isinstance(child, ast.BoolOp):
                 complexity += len(child.values) - 1
 
-        # Extract arguments
+        # 인수 추출
         arguments = [arg.arg for arg in node.args.args]
 
-        # Extract decorators
+        # 데코레이터 추출
         decorators = []
         for decorator in node.decorator_list:
             if isinstance(decorator, ast.Name):
@@ -180,11 +204,11 @@ class ASTNodeVisitor(ast.NodeVisitor):
                 else:
                     decorators.append(f"<complex>.{decorator.attr}")
 
-        # Check for return/yield statements
+        # return/yield 문 확인
         has_return = any(isinstance(n, ast.Return) for n in ast.walk(node))
         has_yield = any(isinstance(n, ast.Yield) for n in ast.walk(node))
 
-        # Extract docstring
+        # docstring 추출
         docstring = None
         if (
             node.body
@@ -211,8 +235,8 @@ class ASTNodeVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        """Visit class definition nodes."""
-        # Extract base classes
+        """클래스 정의 노드 방문."""
+        # 기본 클래스 추출
         bases: list[str] = []
         for base in node.bases:
             if isinstance(base, ast.Name):
@@ -223,7 +247,7 @@ class ASTNodeVisitor(ast.NodeVisitor):
                 else:
                     bases.append(f"<complex>.{base.attr}")
 
-        # Extract decorators
+        # 데코레이터 추출
         decorators: list[str] = []
         for decorator in node.decorator_list:
             if isinstance(decorator, ast.Name):
@@ -234,7 +258,7 @@ class ASTNodeVisitor(ast.NodeVisitor):
                 else:
                     decorators.append(f"<complex>.{decorator.attr}")
 
-        # Extract docstring
+        # docstring 추출
         docstring = None
         if (
             node.body
@@ -244,7 +268,7 @@ class ASTNodeVisitor(ast.NodeVisitor):
         ):
             docstring = node.body[0].value.value
 
-        # Extract class variables
+        # 클래스 변수 추출
         class_variables: list[str] = []
         for item in node.body:
             if isinstance(item, ast.Assign):
@@ -252,7 +276,7 @@ class ASTNodeVisitor(ast.NodeVisitor):
                     if isinstance(target, ast.Name):
                         class_variables.append(target.id)
 
-        # Create class info
+        # 클래스 정보 생성
         class_info = ClassInfo(
             name=node.name,
             line_number=node.lineno,
@@ -265,12 +289,12 @@ class ASTNodeVisitor(ast.NodeVisitor):
             nested_level=self.current_nesting,
         )
 
-        # Visit class body to find methods
+        # 메서드를 찾기 위해 클래스 본문 방문
         self.current_nesting += 1
         self.generic_visit(node)
         self.current_nesting -= 1
 
-        # Filter methods that belong to this class
+        # 이 클래스에 속하는 메서드 필터링
         class_methods = [
             func
             for func in self.functions
@@ -284,7 +308,7 @@ class ASTNodeVisitor(ast.NodeVisitor):
         self.classes.append(class_info)
 
     def visit_Import(self, node: ast.Import) -> None:
-        """Visit import nodes."""
+        """import 노드 방문."""
         for alias in node.names:
             import_info = ImportInfo(
                 module="",
@@ -296,7 +320,7 @@ class ASTNodeVisitor(ast.NodeVisitor):
             self.imports.append(import_info)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        """Visit from-import nodes."""
+        """from-import 노드 방문."""
         module = node.module or ""
         for alias in node.names:
             import_info = ImportInfo(
@@ -309,143 +333,253 @@ class ASTNodeVisitor(ast.NodeVisitor):
             self.imports.append(import_info)
 
     def visit_Num(self, node: ast.Num) -> None:
-        """Visit number nodes to detect magic numbers."""
-        # Consider numbers other than 0, 1, -1 as potential magic numbers
+        """숫자 노드 방문하여 매직 넘버 감지."""
+        # 0, 1, -1이 아닌 숫자를 잠재적 매직 넘버로 간주
         if node.n not in (0, 1, -1):
             self.magic_numbers.append((node.lineno, str(node.n)))
         self.generic_visit(node)
 
     def visit_Constant(self, node: ast.Constant) -> None:
-        """Visit constant nodes to detect magic numbers and hardcoded strings."""
+        """상수 노드 방문하여 매직 넘버와 하드코딩된 문자열 감지."""
         if isinstance(node.value, int | float) and node.value not in (0, 1, -1):
             self.magic_numbers.append((node.lineno, str(node.value)))
         elif isinstance(node.value, str) and len(node.value) > 20:
-            # Consider long strings as potentially hardcoded
+            # 긴 문자열을 잠재적으로 하드코딩된 것으로 간주
             self.hardcoded_strings.append((node.lineno, node.value[:50] + "..."))
         self.generic_visit(node)
 
 
-class PythonASTAnalyzer:
+class PythonASTAnalyzer(BaseTool[ASTAnalysisInput, ASTAnalysisOutput]):
     """
-    A comprehensive tool for analyzing Python code using AST.
+    AST를 사용하여 Python 코드를 분석하는 포괄적인 툴.
 
-    This class provides methods to:
-    1. Parse Python code and build AST representations
-    2. Analyze code structure and extract function/class information
-    3. Calculate code complexity and quality metrics
-    4. Detect potential code smells and issues
-    5. Generate comprehensive code analysis reports
+    이 클래스는 다음 메서드들을 제공합니다:
+    1. Python 코드를 파싱하고 AST 표현을 구축
+    2. 코드 구조를 분석하고 함수/클래스 정보를 추출
+    3. 코드 복잡성과 품질 메트릭을 계산
+    4. 잠재적인 코드 냄새와 문제를 감지
+    5. 포괄적인 코드 분석 보고서를 생성
     """
 
     def __init__(self) -> None:
-        """Initialize the Python AST Analyzer."""
+        """Python AST Analyzer 초기화."""
+        super().__init__("PythonASTAnalyzer")
         self.visitor = ASTNodeVisitor()
         self.ast_tree: ast.AST | None = None
         self.source_code: str = ""
         self.file_path: Path | None = None
 
-    def analyze_file(self, file_path: str | Path) -> dict[str, Any]:
+    def execute(self, input_data: ASTAnalysisInput) -> ToolResult[ASTAnalysisOutput]:
         """
-        Analyze a Python file and return comprehensive analysis results.
+        Python 코드 분석 실행.
 
         Args:
-            file_path: Path to the Python file to analyze
+            input_data: AST 분석을 위한 입력 데이터
 
         Returns:
-            Dictionary containing comprehensive analysis results
+            AST 분석 결과
+        """
+        try:
+            # 입력 검증
+            if not self.validate_input(input_data):
+                return ToolResult.error(
+                    error_code=ToolErrorCode.INVALID_INPUT,
+                    error_message="잘못된 입력 데이터입니다",
+                    metrics=self._create_metrics(),
+                )
+
+            # 분석 실행
+            if input_data.file_path:
+                output = self._analyze_file(input_data.file_path)
+            elif input_data.source_code:
+                output = self._analyze_source(input_data.source_code)
+            elif input_data.directory_path:
+                output = self._analyze_directory(input_data.directory_path)
+            else:
+                return ToolResult.error(
+                    error_code=ToolErrorCode.INVALID_INPUT,
+                    error_message="파일 경로, 소스 코드, 또는 디렉토리 경로 중 하나가 필요합니다",
+                    metrics=self._create_metrics(),
+                )
+
+            # 증거 생성
+            evidence = self._create_evidence(input_data, output)
+
+            # 메트릭 생성
+            metrics = self._create_metrics(
+                files_processed=1 if input_data.file_path else 0,
+                lines_processed=len(self.source_code.splitlines())
+                if self.source_code
+                else 0,
+            )
+
+            return ToolResult.success(
+                output=output,
+                evidence=evidence,
+                metrics=metrics,
+            )
+
+        except Exception as e:
+            logger.error(f"Python AST 분석 실행 중 오류 발생: {e}")
+            return ToolResult.error(
+                error_code=ToolErrorCode.PROCESSING_ERROR,
+                error_message=str(e),
+                metrics=self._create_metrics(),
+            )
+
+    def validate_input(self, input_data: ASTAnalysisInput) -> bool:
+        """
+        입력 데이터 검증.
+
+        Args:
+            input_data: 검증할 입력 데이터
+
+        Returns:
+            검증 통과 여부
+        """
+        if input_data.file_path and not Path(input_data.file_path).exists():
+            return False
+
+        if input_data.directory_path and not Path(input_data.directory_path).is_dir():
+            return False
+
+        if not any(
+            [input_data.file_path, input_data.source_code, input_data.directory_path]
+        ):
+            return False
+
+        return True
+
+    def _create_evidence(
+        self, input_data: ASTAnalysisInput, output: ASTAnalysisOutput
+    ) -> list[ToolEvidence]:
+        """분석 결과에 대한 증거 생성."""
+        evidence = []
+
+        # 파일 정보 증거
+        if input_data.file_path:
+            evidence.append(
+                ToolEvidence(
+                    file_path=input_data.file_path,
+                    content=f"Python 파일 분석: {input_data.file_path}",
+                    evidence_type="file",
+                    description="분석된 Python 파일 경로",
+                )
+            )
+
+        # 분석 결과 증거
+        if output.metrics:
+            evidence.append(
+                ToolEvidence(
+                    file_path="metrics",
+                    content=f"함수 {output.metrics.function_count}개, 클래스 {output.metrics.class_count}개 분석됨",
+                    evidence_type="analysis",
+                    description="코드 분석 결과 요약",
+                )
+            )
+
+        return evidence
+
+    def _analyze_file(self, file_path: str | Path) -> ASTAnalysisOutput:
+        """
+        Python 파일을 분석하고 포괄적인 분석 결과를 반환합니다.
+
+        Args:
+            file_path: 분석할 Python 파일의 경로
+
+        Returns:
+            포괄적인 분석 결과를 담은 딕셔너리
 
         Raises:
-            FileNotFoundError: If the file doesn't exist
-            SyntaxError: If the file contains syntax errors
-            ValueError: If the file is not a Python file
+            FileNotFoundError: 파일이 존재하지 않는 경우
+            SyntaxError: 파일에 구문 오류가 있는 경우
+            ValueError: 파일이 Python 파일이 아닌 경우
         """
         file_path = Path(file_path)
 
-        # Validate file
+        # 파일 검증
         if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
+            raise FileNotFoundError(f"파일을 찾을 수 없습니다: {file_path}")
 
         if file_path.suffix != ".py":
-            raise ValueError(f"File is not a Python file: {file_path}")
+            raise ValueError(f"파일이 Python 파일이 아닙니다: {file_path}")
 
         self.file_path = file_path
 
-        # Read and parse the file
+        # 파일 읽기 및 파싱
         try:
             with open(file_path, encoding="utf-8") as f:
                 self.source_code = f.read()
         except UnicodeDecodeError:
-            # Try with different encoding
+            # 다른 인코딩으로 시도
             with open(file_path, encoding="latin-1") as f:
                 self.source_code = f.read()
 
-        return self.analyze_source(self.source_code)
+        return self._analyze_source(self.source_code)
 
-    def analyze_source(self, source_code: str) -> dict[str, Any]:
+    def _analyze_source(self, source_code: str) -> ASTAnalysisOutput:
         """
-        Analyze Python source code and return comprehensive analysis results.
+        Python 소스 코드를 분석하고 포괄적인 분석 결과를 반환합니다.
 
         Args:
-            source_code: Python source code as string
+            source_code: 문자열로 된 Python 소스 코드
 
         Returns:
-            Dictionary containing comprehensive analysis results
+            포괄적인 분석 결과를 담은 딕셔너리
 
         Raises:
-            SyntaxError: If the source code contains syntax errors
+            SyntaxError: 소스 코드에 구문 오류가 있는 경우
         """
         self.source_code = source_code
 
-        # Reset visitor state
+        # 방문자 상태 초기화
         self.visitor = ASTNodeVisitor()
 
         try:
-            # Parse the source code
+            # 소스 코드 파싱
             self.ast_tree = ast.parse(source_code)
 
-            # Visit all nodes
+            # 모든 노드 방문
             self.visitor.visit(self.ast_tree)
 
-            # Calculate metrics
+            # 메트릭 계산
             metrics = self._calculate_metrics()
 
-            # Generate analysis results
-            results = {
-                "file_info": {
+            # 분석 결과 생성
+            results = ASTAnalysisOutput(
+                file_info={
                     "file_path": (
                         str(self.file_path) if self.file_path else "source_code"
                     ),
                     "total_lines": len(source_code.splitlines()),
                     "analysis_timestamp": self._get_timestamp(),
                 },
-                "functions": [
-                    self._function_to_dict(f) for f in self.visitor.functions
-                ],
-                "classes": [self._class_to_dict(c) for c in self.visitor.classes],
-                "imports": [self._import_to_dict(i) for i in self.visitor.imports],
-                "metrics": metrics,
-                "code_smells": self._detect_code_smells(),
-                "summary": self._generate_summary(),
-            }
+                functions=[self._function_to_dict(f) for f in self.visitor.functions],
+                classes=[self._class_to_dict(c) for c in self.visitor.classes],
+                imports=[self._import_to_dict(i) for i in self.visitor.imports],
+                metrics=metrics,
+                code_smells=self._detect_code_smells(),
+                summary=self._generate_summary(),
+            )
 
             logger.info(
-                f"Successfully analyzed Python code: {len(self.visitor.functions)} functions, {len(self.visitor.classes)} classes"
+                f"Python 코드 분석 성공: {len(self.visitor.functions)}개 함수, {len(self.visitor.classes)}개 클래스"
             )
             return results
 
         except SyntaxError as e:
-            logger.error(f"Syntax error in Python code: {e}")
+            logger.error(f"Python 코드 구문 오류: {e}")
             raise
         except Exception as e:
-            logger.error(f"Unexpected error during AST analysis: {e}")
+            logger.error(f"AST 분석 중 예상치 못한 오류: {e}")
             raise
 
     def _calculate_metrics(self) -> CodeMetrics:
-        """Calculate comprehensive code metrics."""
+        """포괄적인 코드 메트릭을 계산합니다."""
         lines = self.source_code.splitlines()
         total_lines = len(lines)
 
-        # Count different types of lines
+        # 다양한 타입의 라인 수 계산
         code_lines = 0
         comment_lines = 0
         blank_lines = 0
@@ -476,14 +610,14 @@ class PythonASTAnalyzer:
             else:
                 code_lines += 1
 
-        # Calculate complexity metrics
+        # 복잡성 메트릭 계산
         complexities = [f.complexity for f in self.visitor.functions]
         average_complexity = (
             sum(complexities) / len(complexities) if complexities else 0
         )
         max_complexity = max(complexities) if complexities else 0
 
-        # Calculate nesting metrics
+        # 중첩 메트릭 계산
         max_nesting = max(
             [f.nested_level for f in self.visitor.functions]
             + [c.nested_level for c in self.visitor.classes],
@@ -507,7 +641,7 @@ class PythonASTAnalyzer:
         )
 
     def _detect_code_smells(self) -> dict[str, list[dict[str, Any]]]:
-        """Detect potential code smells and issues."""
+        """잠재적인 코드 냄새와 문제를 감지합니다."""
         smells: dict[str, list[dict[str, Any]]] = {
             "high_complexity": [],
             "long_functions": [],
@@ -517,7 +651,7 @@ class PythonASTAnalyzer:
             "missing_docstrings": [],
         }
 
-        # High complexity functions (complexity > 10)
+        # 높은 복잡성 함수 (복잡성 > 10)
         for func in self.visitor.functions:
             if func.complexity > 10:
                 smells["high_complexity"].append(
@@ -529,7 +663,7 @@ class PythonASTAnalyzer:
                     }
                 )
 
-        # Long functions (> 50 lines)
+        # 긴 함수 (> 50 라인)
         for func in self.visitor.functions:
             if func.end_line - func.line_number > 50:
                 smells["long_functions"].append(
@@ -541,7 +675,7 @@ class PythonASTAnalyzer:
                     }
                 )
 
-        # Deep nesting (> 4 levels)
+        # 깊은 중첩 (> 4 레벨)
         for func in self.visitor.functions:
             if func.nested_level > 4:
                 smells["deep_nesting"].append(
@@ -553,27 +687,27 @@ class PythonASTAnalyzer:
                     }
                 )
 
-        # Magic numbers
+        # 매직 넘버
         for line, value in self.visitor.magic_numbers:
             smells["magic_numbers"].append(
                 {
                     "line": line,
                     "value": value,
-                    "suggestion": "Consider defining as a named constant",
+                    "suggestion": "명명된 상수로 정의하는 것을 고려하세요",
                 }
             )
 
-        # Hardcoded strings
+        # 하드코딩된 문자열
         for line, value in self.visitor.hardcoded_strings:
             smells["hardcoded_strings"].append(
                 {
                     "line": line,
                     "value": value,
-                    "suggestion": "Consider externalizing to configuration",
+                    "suggestion": "설정으로 외부화하는 것을 고려하세요",
                 }
             )
 
-        # Missing docstrings
+        # 누락된 docstring
         for func in self.visitor.functions:
             if not func.docstring:
                 smells["missing_docstrings"].append(
@@ -589,13 +723,13 @@ class PythonASTAnalyzer:
         return smells
 
     def _generate_summary(self) -> dict[str, Any]:
-        """Generate a summary of the analysis."""
+        """분석 요약을 생성합니다."""
         metrics = self._calculate_metrics()
 
-        # Calculate quality score (0-100)
+        # 품질 점수 계산 (0-100)
         quality_score = 100
 
-        # Deduct points for various issues
+        # 다양한 문제에 대한 점수 차감
         if metrics.max_complexity > 10:
             quality_score -= min(20, (metrics.max_complexity - 10) * 2)
 
@@ -608,7 +742,7 @@ class PythonASTAnalyzer:
         if len(self.visitor.hardcoded_strings) > 0:
             quality_score -= min(10, len(self.visitor.hardcoded_strings))
 
-        # Ensure score doesn't go below 0
+        # 점수가 0 아래로 내려가지 않도록 보장
         quality_score = max(0, quality_score)
 
         return {
@@ -626,52 +760,50 @@ class PythonASTAnalyzer:
         }
 
     def _get_assessment(self, quality_score: int) -> str:
-        """Get a textual assessment based on quality score."""
+        """품질 점수에 기반한 텍스트 평가를 반환합니다."""
         if quality_score >= 90:
-            return "Excellent - Code follows best practices"
+            return "우수 - 코드가 모범 사례를 따릅니다"
         elif quality_score >= 80:
-            return "Good - Minor improvements could be made"
+            return "좋음 - 약간의 개선이 가능합니다"
         elif quality_score >= 70:
-            return "Fair - Several areas need attention"
+            return "보통 - 여러 영역에 주의가 필요합니다"
         elif quality_score >= 60:
-            return "Poor - Significant refactoring recommended"
+            return "나쁨 - 상당한 리팩토링이 권장됩니다"
         else:
-            return "Very Poor - Major refactoring required"
+            return "매우 나쁨 - 주요 리팩토링이 필요합니다"
 
     def _get_recommendations(self) -> list[str]:
-        """Generate recommendations for code improvement."""
+        """코드 개선을 위한 권장사항을 생성합니다."""
         recommendations = []
         metrics = self._calculate_metrics()
 
         if metrics.max_complexity > 10:
             recommendations.append(
-                "Consider breaking down complex functions into smaller, more manageable pieces"
+                "복잡한 함수를 더 작고 관리하기 쉬운 조각들로 나누는 것을 고려하세요"
             )
 
         if metrics.max_nesting > 4:
             recommendations.append(
-                "Reduce nesting levels by extracting helper functions or using early returns"
+                "헬퍼 함수를 추출하거나 조기 반환을 사용하여 중첩 레벨을 줄이세요"
             )
 
         if self.visitor.magic_numbers:
-            recommendations.append(
-                "Replace magic numbers with named constants for better readability"
-            )
+            recommendations.append("가독성을 위해 매직 넘버를 명명된 상수로 대체하세요")
 
         if self.visitor.hardcoded_strings:
             recommendations.append(
-                "Externalize hardcoded strings to configuration files or constants"
+                "하드코딩된 문자열을 설정 파일이나 상수로 외부화하세요"
             )
 
         if not recommendations:
             recommendations.append(
-                "Code follows good practices. Keep up the good work!"
+                "코드가 좋은 관행을 따릅니다. 계속 좋은 작업을 하세요!"
             )
 
         return recommendations
 
     def _function_to_dict(self, func: FunctionInfo) -> dict[str, Any]:
-        """Convert FunctionInfo to dictionary."""
+        """FunctionInfo를 딕셔너리로 변환합니다."""
         return {
             "name": func.name,
             "line_number": func.line_number,
@@ -686,7 +818,7 @@ class PythonASTAnalyzer:
         }
 
     def _class_to_dict(self, cls: ClassInfo) -> dict[str, Any]:
-        """Convert ClassInfo to dictionary."""
+        """ClassInfo를 딕셔너리로 변환합니다."""
         return {
             "name": cls.name,
             "line_number": cls.line_number,
@@ -700,7 +832,7 @@ class PythonASTAnalyzer:
         }
 
     def _import_to_dict(self, imp: ImportInfo) -> dict[str, Any]:
-        """Convert ImportInfo to dictionary."""
+        """ImportInfo를 딕셔너리로 변환합니다."""
         return {
             "module": imp.module,
             "names": imp.names,
@@ -710,260 +842,263 @@ class PythonASTAnalyzer:
         }
 
     def _get_timestamp(self) -> str:
-        """Get current timestamp as string."""
+        """현재 타임스탬프를 문자열로 반환합니다."""
         from datetime import datetime
 
         return datetime.now().isoformat()
 
-    def analyze_directory(self, directory_path: str | Path) -> dict[str, Any]:
+    def _analyze_directory(self, directory_path: str | Path) -> ASTAnalysisOutput:
         """
-        Analyze all Python files in a directory.
+        디렉토리의 모든 Python 파일을 분석합니다.
 
         Args:
-            directory_path: Path to the directory to analyze
+            directory_path: 분석할 디렉토리의 경로
 
         Returns:
-            Dictionary containing analysis results for all Python files
+            모든 Python 파일에 대한 분석 결과
         """
         directory_path = Path(directory_path)
 
         if not directory_path.exists() or not directory_path.is_dir():
-            raise ValueError(f"Invalid directory path: {directory_path}")
+            raise ValueError(f"잘못된 디렉토리 경로: {directory_path}")
 
         python_files = list(directory_path.glob("**/*.py"))
 
         if not python_files:
-            logger.warning(f"No Python files found in directory: {directory_path}")
-            return {"directory": str(directory_path), "files": [], "summary": {}}
+            logger.warning(
+                f"디렉토리에서 Python 파일을 찾을 수 없습니다: {directory_path}"
+            )
+            return ASTAnalysisOutput(
+                file_info={"directory": str(directory_path)},
+                functions=[],
+                classes=[],
+                imports=[],
+                metrics=None,
+                code_smells={},
+                summary={},
+            )
 
-        results = {"directory": str(directory_path), "files": [], "summary": {}}
+        # 디렉토리 분석 결과 생성
+        results = ASTAnalysisOutput(
+            file_info={"directory": str(directory_path)},
+            functions=[],
+            classes=[],
+            imports=[],
+            metrics=None,
+            code_smells={},
+            summary={},
+        )
 
-        total_metrics = {
-            "total_files": len(python_files),
-            "total_functions": 0,
-            "total_classes": 0,
-            "total_imports": 0,
-            "total_complexity": 0.0,
-            "max_complexity": 0,
-            "max_nesting": 0,
-            "average_complexity": 0.0,
-        }
+        # 모든 파일 분석 결과 집계
+        all_functions = []
+        all_classes = []
+        all_imports = []
 
         for file_path in python_files:
             try:
-                file_analysis = self.analyze_file(file_path)
-                cast(list[dict[str, Any]], results["files"]).append(
-                    {"file_path": str(file_path), "analysis": file_analysis}
-                )
+                file_analysis = self._analyze_file(file_path)
 
-                # Aggregate metrics
-                metrics = file_analysis["metrics"]
-                total_metrics["total_functions"] += metrics.function_count
-                total_metrics["total_classes"] += metrics.class_count
-                total_metrics["total_imports"] += metrics.import_count
-                total_metrics["total_complexity"] += (
-                    metrics.average_complexity * metrics.function_count
-                )
-                total_metrics["max_complexity"] = max(
-                    total_metrics["max_complexity"], int(metrics.max_complexity)
-                )
-                total_metrics["max_nesting"] = max(
-                    total_metrics["max_nesting"], int(metrics.max_nesting)
-                )
+                # 결과 집계
+                if file_analysis.functions:
+                    all_functions.extend(file_analysis.functions)
+                if file_analysis.classes:
+                    all_classes.extend(file_analysis.classes)
+                if file_analysis.imports:
+                    all_imports.extend(file_analysis.imports)
 
             except Exception as e:
-                logger.error(f"Failed to analyze file {file_path}: {e}")
-                cast(list[dict[str, Any]], results["files"]).append(
-                    {"file_path": str(file_path), "error": str(e)}
-                )
+                logger.error(f"파일 {file_path} 분석 실패: {e}")
 
-        # Calculate averages
-        if total_metrics["total_functions"] > 0:
-            total_metrics["average_complexity"] = (
-                float(total_metrics["total_complexity"])
-                / total_metrics["total_functions"]
-            )
-        else:
-            total_metrics["average_complexity"] = 0.0
+        # 집계된 결과 설정
+        results.functions = all_functions
+        results.classes = all_classes
+        results.imports = all_imports
 
-        results["summary"] = total_metrics
+        # 전체 메트릭 계산
+        if all_functions or all_classes:
+            results.metrics = self._calculate_metrics()
+            results.code_smells = self._detect_code_smells()
+            results.summary = self._generate_summary()
 
-        logger.info(
-            f"Successfully analyzed {len(python_files)} Python files in directory"
-        )
+        logger.info(f"디렉토리에서 {len(python_files)}개 Python 파일 분석 성공")
         return results
 
 
 def main() -> None:
     """
-    Example usage of PythonASTAnalyzer class.
+    PythonASTAnalyzer 클래스 사용 예시.
 
-    This demonstrates how to use the PythonASTAnalyzer to:
-    1. Analyze individual Python files
-    2. Analyze entire directories
-    3. Generate comprehensive code analysis reports
-    4. Detect code smells and quality issues
-    5. Provide improvement recommendations
+    이 스크립트는 PythonASTAnalyzer를 사용하여 다음을 수행하는 방법을 보여줍니다:
+    1. 개별 Python 파일 분석
+    2. 전체 디렉토리 분석
+    3. 포괄적인 코드 분석 보고서 생성
+    4. 코드 냄새와 품질 문제 감지
+    5. 개선 권장사항 제공
 
-    Usage Examples:
-        # Analyze current directory (must contain Python files)
+    사용 예시:
+        # 현재 디렉토리에서 실행 (Python 파일이 포함되어야 함)
         python python_ast.py
 
-        # Analyze a specific Python file
+        # 특정 Python 파일 분석
         python python_ast.py /path/to/your/file.py
 
-        # Analyze a directory
+        # 디렉토리 분석
         python python_ast.py /path/to/your/directory
 
-        # Run from project root
+        # 프로젝트 루트에서 실행
         python tools/code_analysis/python_ast.py
 
-    Command Line Arguments:
-        path (optional): Path to Python file or directory to analyze
-                        Default: current directory (.)
+    명령줄 인수:
+        path (선택사항): 분석할 Python 파일 또는 디렉토리 경로
+                        기본값: 현재 디렉토리 (.)
 
-    Output:
-        - File-by-file analysis results
-        - Code structure information (functions, classes, imports)
-        - Quality metrics and complexity analysis
-        - Code smell detection and recommendations
-        - Overall quality assessment and score
+    출력:
+        - 파일별 분석 결과
+        - 코드 구조 정보 (함수, 클래스, import)
+        - 품질 메트릭 및 복잡성 분석
+        - 코드 냄새 감지 및 권장사항
+        - 전체 품질 평가 및 점수
     """
 
-    # Check if path is provided as command line argument
+    # 명령줄 인수로 경로가 제공되었는지 확인
     if len(sys.argv) > 1:
         target_path = sys.argv[1]
     else:
-        # Default to current directory
+        # 기본값: 현재 디렉토리
         target_path = "."
 
     try:
-        # Initialize Python AST Analyzer
-        logger.info(f"Initializing Python AST Analyzer for: {target_path}")
+        # Python AST Analyzer 초기화
+        logger.info(f"Python AST Analyzer 초기화 중: {target_path}")
         analyzer = PythonASTAnalyzer()
 
         target_path_obj = Path(target_path)
 
         if target_path_obj.is_file() and target_path_obj.suffix == ".py":
-            # Analyze single Python file
-            logger.info(f"Analyzing Python file: {target_path_obj}")
-            results = analyzer.analyze_file(target_path_obj)
+            # 단일 Python 파일 분석
+            logger.info(f"Python 파일 분석 중: {target_path_obj}")
+            input_data = ASTAnalysisInput(file_path=str(target_path_obj))
+            result = analyzer.run(input_data)
 
-            # Display results
-            _display_file_analysis(results)
+            if result.status.value == "success" and result.output:
+                _display_file_analysis(result.output)
+            else:
+                logger.error(f"분석 실패: {result.error_message}")
 
         elif target_path_obj.is_dir():
-            # Analyze directory
-            logger.info(f"Analyzing Python files in directory: {target_path_obj}")
-            results = analyzer.analyze_directory(target_path_obj)
+            # 디렉토리 분석
+            logger.info(f"디렉토리의 Python 파일 분석 중: {target_path_obj}")
+            input_data = ASTAnalysisInput(directory_path=str(target_path_obj))
+            result = analyzer.run(input_data)
 
-            # Display results
-            _display_directory_analysis(results)
+            if result.status.value == "success" and result.output:
+                _display_directory_analysis(result.output)
+            else:
+                logger.error(f"분석 실패: {result.error_message}")
 
         else:
             logger.error(
-                f"Invalid path: {target_path}. Must be a Python file or directory."
+                f"잘못된 경로: {target_path}. Python 파일 또는 디렉토리여야 합니다."
             )
             sys.exit(1)
 
     except Exception as e:
-        logger.error(f"Failed to analyze Python code: {e}")
+        logger.error(f"Python 코드 분석 실패: {e}")
         sys.exit(1)
 
 
-def _display_file_analysis(results: dict[str, Any]) -> None:
-    """Display analysis results for a single file."""
+def _display_file_analysis(results: ASTAnalysisOutput) -> None:
+    """단일 파일에 대한 분석 결과를 표시합니다."""
     logger.info("\n" + "=" * 60)
-    logger.info("PYTHON AST ANALYSIS RESULTS")
+    logger.info("PYTHON AST 분석 결과")
     logger.info("=" * 60)
 
-    # File info
-    file_info = results["file_info"]
-    logger.info(f"File: {file_info['file_path']}")
-    logger.info(f"Total Lines: {file_info['total_lines']}")
-    logger.info(f"Analysis Time: {file_info['analysis_timestamp']}")
+    # 파일 정보
+    file_info = results.file_info
+    if file_info:
+        logger.info(f"파일: {file_info.get('file_path', 'N/A')}")
+        logger.info(f"총 라인: {file_info.get('total_lines', 'N/A')}")
+        logger.info(f"분석 시간: {file_info.get('analysis_timestamp', 'N/A')}")
 
-    # Summary
-    summary = results["summary"]
-    logger.info(f"\nQuality Score: {summary['quality_score']}/100")
-    logger.info(f"Assessment: {summary['overall_assessment']}")
+    # 요약
+    summary = results.summary
+    if summary:
+        logger.info(f"\n품질 점수: {summary.get('quality_score', 'N/A')}/100")
+        logger.info(f"평가: {summary.get('overall_assessment', 'N/A')}")
 
-    # Statistics
-    stats = summary["statistics"]
-    logger.info("\nStatistics:")
-    logger.info(f"  Functions: {stats['total_functions']}")
-    logger.info(f"  Classes: {stats['total_classes']}")
-    logger.info(f"  Imports: {stats['total_imports']}")
-    logger.info(f"  Average Complexity: {stats['average_complexity']}")
-    logger.info(f"  Max Complexity: {stats['max_complexity']}")
-    logger.info(f"  Max Nesting: {stats['max_nesting']}")
+        # 통계
+        stats = summary.get("statistics", {})
+        logger.info("\n통계:")
+        logger.info(f"  함수: {stats.get('total_functions', 'N/A')}")
+        logger.info(f"  클래스: {stats.get('total_classes', 'N/A')}")
+        logger.info(f"  Import: {stats.get('total_imports', 'N/A')}")
+        logger.info(f"  평균 복잡성: {stats.get('average_complexity', 'N/A')}")
+        logger.info(f"  최대 복잡성: {stats.get('max_complexity', 'N/A')}")
+        logger.info(f"  최대 중첩: {stats.get('max_nesting', 'N/A')}")
 
-    # Functions
-    if results["functions"]:
-        logger.info(f"\nFunctions ({len(results['functions'])}):")
-        for func in results["functions"]:
+    # 함수
+    if results.functions:
+        logger.info(f"\n함수 ({len(results.functions)}개):")
+        for func in results.functions:
             logger.info(
-                f"  {func['name']} (line {func['line_number']}) - Complexity: {func['complexity']}"
+                f"  {func['name']} (라인 {func['line_number']}) - 복잡성: {func['complexity']}"
             )
 
-    # Classes
-    if results["classes"]:
-        logger.info(f"\nClasses ({len(results['classes'])}):")
-        for cls in results["classes"]:
+    # 클래스
+    if results.classes:
+        logger.info(f"\n클래스 ({len(results.classes)}개):")
+        for cls in results.classes:
             logger.info(
-                f"  {cls['name']} (line {cls['line_number']}) - Methods: {len(cls['methods'])}"
+                f"  {cls['name']} (라인 {cls['line_number']}) - 메서드: {len(cls['methods'])}개"
             )
 
-    # Code smells
-    smells = results["code_smells"]
-    if any(smells.values()):
-        logger.info("\nCode Smells Detected:")
+    # 코드 냄새
+    smells = results.code_smells
+    if smells and any(smells.values()):
+        logger.info("\n감지된 코드 냄새:")
         for smell_type, items in smells.items():
             if items:
                 logger.info(
-                    f"  {smell_type.replace('_', ' ').title()}: {len(items)} issues"
+                    f"  {smell_type.replace('_', ' ').title()}: {len(items)}개 문제"
                 )
 
-    # Recommendations
-    recommendations = summary["recommendations"]
-    if recommendations:
-        logger.info("\nRecommendations:")
-        for i, rec in enumerate(recommendations, 1):
-            logger.info(f"  {i}. {rec}")
+    # 권장사항
+    if summary and "recommendations" in summary:
+        recommendations = summary["recommendations"]
+        if recommendations:
+            logger.info("\n권장사항:")
+            for i, rec in enumerate(recommendations, 1):
+                logger.info(f"  {i}. {rec}")
 
 
-def _display_directory_analysis(results: dict[str, Any]) -> None:
-    """Display analysis results for a directory."""
+def _display_directory_analysis(results: ASTAnalysisOutput) -> None:
+    """디렉토리에 대한 분석 결과를 표시합니다."""
     logger.info("\n" + "=" * 60)
-    logger.info("DIRECTORY ANALYSIS RESULTS")
+    logger.info("디렉토리 분석 결과")
     logger.info("=" * 60)
 
-    logger.info(f"Directory: {results['directory']}")
+    file_info = results.file_info
+    if file_info:
+        logger.info(f"디렉토리: {file_info.get('directory', 'N/A')}")
 
-    # Summary
-    summary = results["summary"]
-    logger.info("\nDirectory Summary:")
-    logger.info(f"  Total Python Files: {summary['total_files']}")
-    logger.info(f"  Total Functions: {summary['total_functions']}")
-    logger.info(f"  Total Classes: {summary['total_classes']}")
-    logger.info(f"  Total Imports: {summary['total_imports']}")
-    logger.info(f"  Average Complexity: {summary['average_complexity']:.2f}")
-    logger.info(f"  Max Complexity: {summary['max_complexity']}")
-    logger.info(f"  Max Nesting: {summary['max_nesting']}")
+    # 요약
+    summary = results.summary
+    if summary:
+        logger.info("\n디렉토리 요약:")
+        stats = summary.get("statistics", {})
+        logger.info(f"  총 함수: {stats.get('total_functions', 'N/A')}")
+        logger.info(f"  총 클래스: {stats.get('total_classes', 'N/A')}")
+        logger.info(f"  총 Import: {stats.get('total_imports', 'N/A')}")
+        logger.info(f"  평균 복잡성: {stats.get('average_complexity', 'N/A')}")
+        logger.info(f"  최대 복잡성: {stats.get('max_complexity', 'N/A')}")
+        logger.info(f"  최대 중첩: {stats.get('max_nesting', 'N/A')}")
 
-    # File results
-    logger.info("\nFile Analysis Results:")
-    for file_result in results["files"]:
-        if "error" in file_result:
-            logger.warning(
-                f"  {file_result['file_path']}: ERROR - {file_result['error']}"
-            )
-        else:
-            analysis = file_result["analysis"]
-            summary = analysis["summary"]
-            logger.info(
-                f"  {file_result['file_path']}: Score {summary['quality_score']}/100 - {summary['overall_assessment']}"
-            )
+    # 파일 결과
+    logger.info("\n파일 분석 결과:")
+    if results.functions:
+        logger.info(f"  총 {len(results.functions)}개 함수 분석됨")
+    if results.classes:
+        logger.info(f"  총 {len(results.classes)}개 클래스 분석됨")
 
 
 if __name__ == "__main__":
