@@ -55,25 +55,25 @@ class Severity(Enum):
 @dataclass
 class RuleDefinition:
     """
-    규칙 정의 구조.
+    Rule definition structure.
 
-    NFR-5 준수를 위한 규칙 메타데이터를 포함합니다.
+    Contains rule metadata for NFR-5 compliance.
     """
 
-    rule_id: str  # 고유 규칙 ID (예: "SEC001", "PERF001")
-    name: str  # 규칙 이름
-    category: RuleCategory  # 규칙 카테고리
-    severity: Severity  # 기본 심각도
-    version: str  # 규칙 버전 (예: "1.0.0")
-    description: str  # 규칙 설명
-    examples: list[str]  # 적용 예시
-    created_at: str  # 생성일
-    updated_at: str  # 최종 수정일
-    deprecated: bool = False  # 폐기 여부
-    replacement_rule: str | None = None  # 대체 규칙 ID
+    rule_id: str  # Unique rule ID (e.g., "SEC001", "PERF001")
+    name: str  # Rule name
+    category: RuleCategory  # Rule category
+    severity: Severity  # Default severity
+    version: str  # Rule version (e.g., "1.0.0")
+    description: str  # Rule description
+    examples: list[str]  # Application examples
+    created_at: str  # Creation date
+    updated_at: str  # Last modified date
+    deprecated: bool = False  # Deprecation status
+    replacement_rule: str | None = None  # Replacement rule ID
 
     def to_dict(self) -> dict[str, Any]:
-        """딕셔너리로 변환."""
+        """Convert to dictionary."""
         return {
             "rule_id": self.rule_id,
             "name": self.name,
@@ -90,7 +90,7 @@ class RuleDefinition:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "RuleDefinition":
-        """딕셔너리로부터 생성."""
+        """Create from dictionary."""
         return cls(
             rule_id=data["rule_id"],
             name=data["name"],
@@ -108,9 +108,9 @@ class RuleDefinition:
 
 class RuleRegistry:
     """
-    규칙 레지스트리 - 중앙화된 규칙 관리.
+    Rule registry - Centralized rule management.
 
-    모든 규칙의 등록, 조회, 버전 관리를 담당합니다.
+    Responsible for registration, lookup, and version management of all rules.
     """
 
     def __init__(self) -> None:
@@ -123,11 +123,11 @@ class RuleRegistry:
             # Security rules (NFR-5 example)
             RuleDefinition(
                 rule_id="SEC001",
-                name="SQL Injection 취약점",
+                name="SQL Injection Vulnerability",
                 category=RuleCategory.SECURITY,
                 severity=Severity.HIGH,
                 version="1.0.0",
-                description="SQL 쿼리에서 사용자 입력을 직접 삽입하는 보안 취약점",
+                description="Security vulnerability where user input is directly inserted into SQL queries",
                 examples=[
                     'cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")',
                     "query = f\"DELETE FROM table WHERE col = '{value}'\"",
@@ -137,11 +137,11 @@ class RuleRegistry:
             ),
             RuleDefinition(
                 rule_id="SEC002",
-                name="XSS 취약점",
+                name="XSS Vulnerability",
                 category=RuleCategory.SECURITY,
                 severity=Severity.HIGH,
                 version="1.0.0",
-                description="크로스 사이트 스크립팅 취약점 - 사용자 입력을 HTML에 직접 출력",
+                description="Cross-Site Scripting vulnerability where user input is directly output to HTML",
                 examples=[
                     'return f"<div>{user_input}</div>"',
                     "response.write(request.GET['param'])",
@@ -151,11 +151,11 @@ class RuleRegistry:
             ),
             RuleDefinition(
                 rule_id="PERF001",
-                name="N+1 쿼리 패턴",
+                name="N+1 Query Pattern",
                 category=RuleCategory.PERFORMANCE,
                 severity=Severity.MEDIUM,
                 version="1.0.0",
-                description="루프 내에서 개별 쿼리를 실행하는 비효율적인 패턴",
+                description="Inefficient pattern where individual queries are executed within a loop",
                 examples=[
                     "for user in users: user_data = db.query(UserData).filter(id=user.id).first()",
                     "for item in items: category = Category.query.get(item.category_id)",
@@ -165,11 +165,11 @@ class RuleRegistry:
             ),
             RuleDefinition(
                 rule_id="QUAL001",
-                name="타입 힌트 누락",
+                name="Missing Type Hints",
                 category=RuleCategory.QUALITY,
                 severity=Severity.LOW,
                 version="1.0.0",
-                description="함수 매개변수나 반환값에 타입 힌트를 제공하지 않음",
+                description="Type hints are not provided for function parameters or return values",
                 examples=[
                     "def process_data(data): return data * 2",
                     "def get_user(id): return User.query.get(id)",
@@ -179,28 +179,28 @@ class RuleRegistry:
             ),
             RuleDefinition(
                 rule_id="DOC001",
-                name="문서화되지 않은 공개 API",
+                name="Undocumented public API",
                 category=RuleCategory.DOCUMENTATION,
                 severity=Severity.MEDIUM,
                 version="1.0.0",
-                description="공개 인터페이스에 대한 문서가 누락됨",
+                description="Documentation missing for public interface",
                 examples=[
-                    "def api_endpoint(request): pass  # 문서 없음",
-                    "class PublicService: def method(self): pass  # 문서 없음",
+                    "def api_endpoint(request): pass  # undocumented",
+                    "class PublicService: def method(self): pass  # undocumented",
                 ],
                 created_at="2025-01-15",
                 updated_at="2025-01-15",
             ),
             RuleDefinition(
                 rule_id="SCHEMA001",
-                name="인덱스 누락",
+                name="Missing Index",
                 category=RuleCategory.SCHEMA,
                 severity=Severity.MEDIUM,
                 version="1.0.0",
-                description="WHERE 절에서 자주 사용되는 컬럼에 인덱스가 없음",
+                description="Index is missing on columns frequently used in WHERE clauses",
                 examples=[
-                    "WHERE user_id = ?  # user_id에 인덱스 없음",
-                    "ORDER BY created_at DESC  # created_at에 인덱스 없음",
+                    "WHERE user_id = ?  # user_id missing index",
+                    "ORDER BY created_at DESC  # created_at missing index",
                 ],
                 created_at="2025-01-15",
                 updated_at="2025-01-15",

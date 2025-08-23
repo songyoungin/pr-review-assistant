@@ -1,8 +1,8 @@
 """
-LLM 통합 도구 테스트 - NFR-2, NFR-5 준수 검증
+LLM integration tool test - NFR-2, NFR-5 compliance verification
 
-이 모듈은 LLM 통합 도구의 기능을 테스트합니다.
-특히 NFR-2 (근거 포함)와 NFR-5 (규칙 ID/버전) 준수를 검증합니다.
+This module tests the functionality of LLM integration tools.
+It specifically verifies NFR-2 (evidence inclusion) and NFR-5 (rule ID/version) compliance.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from tools.llm.tool import (
 
 
 class TestLLMTool:
-    """LLM 통합 도구 테스트 클래스."""
+    """Test class for LLM integration tools."""
 
     @pytest.fixture
     def mock_provider(self) -> Any:
