@@ -18,7 +18,7 @@ from typing import Any
 
 from loguru import logger
 
-from ..base import BaseTool, ToolErrorCode, ToolEvidence, ToolResult
+from tools.base import BaseTool, ToolErrorCode, ToolEvidence, ToolResult
 
 
 @dataclass
@@ -371,7 +371,7 @@ class PythonASTAnalyzer(BaseTool[ASTAnalysisInput, ASTAnalysisOutput]):
 
     def execute(self, input_data: ASTAnalysisInput) -> ToolResult[ASTAnalysisOutput]:
         """
-        Python 코드 분석 실행.
+        Python AST 분석 실행.
 
         Args:
             input_data: AST 분석을 위한 입력 데이터
@@ -380,7 +380,7 @@ class PythonASTAnalyzer(BaseTool[ASTAnalysisInput, ASTAnalysisOutput]):
             AST 분석 결과
         """
         try:
-            # 입력 검증
+            # Synchronous execution path
             if not self.validate_input(input_data):
                 return ToolResult.error(
                     error_code=ToolErrorCode.INVALID_INPUT,
@@ -388,7 +388,6 @@ class PythonASTAnalyzer(BaseTool[ASTAnalysisInput, ASTAnalysisOutput]):
                     metrics=self._create_metrics(),
                 )
 
-            # 분석 실행
             if input_data.file_path:
                 output = self._analyze_file(input_data.file_path)
             elif input_data.source_code:
@@ -402,10 +401,7 @@ class PythonASTAnalyzer(BaseTool[ASTAnalysisInput, ASTAnalysisOutput]):
                     metrics=self._create_metrics(),
                 )
 
-            # 증거 생성
             evidence = self._create_evidence(input_data, output)
-
-            # 메트릭 생성
             metrics = self._create_metrics(
                 files_processed=1 if input_data.file_path else 0,
                 lines_processed=len(self.source_code.splitlines())
@@ -978,7 +974,7 @@ def main() -> None:
             # 단일 Python 파일 분석
             logger.info(f"Python 파일 분석 중: {target_path_obj}")
             input_data = ASTAnalysisInput(file_path=str(target_path_obj))
-            result = analyzer.run(input_data)
+            result = analyzer.execute(input_data)
 
             if result.status.value == "success" and result.output:
                 _display_file_analysis(result.output)
@@ -989,7 +985,7 @@ def main() -> None:
             # 디렉토리 분석
             logger.info(f"디렉토리의 Python 파일 분석 중: {target_path_obj}")
             input_data = ASTAnalysisInput(directory_path=str(target_path_obj))
-            result = analyzer.run(input_data)
+            result = analyzer.execute(input_data)
 
             if result.status.value == "success" and result.output:
                 _display_directory_analysis(result.output)

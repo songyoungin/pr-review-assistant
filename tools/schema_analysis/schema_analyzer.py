@@ -18,7 +18,7 @@ from typing import Any
 
 from loguru import logger
 
-from ..base import BaseTool, ToolErrorCode, ToolEvidence, ToolResult
+from tools.base import BaseTool, ToolErrorCode, ToolEvidence, ToolResult
 
 
 class ChangeType(Enum):
@@ -843,7 +843,7 @@ def main() -> None:
 
         # Run analysis
         logger.info("Running schema analysis...")
-        result = analyzer.run(input_data)
+        result = analyzer.execute(input_data)
 
         if result.status.value == "success" and result.output:
             output = result.output

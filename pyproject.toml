@@ -33,6 +33,7 @@ dev = [
     "pytest-cov>=5.0.0",
     "types-requests",
     "types-PyYAML",
+    "pytest-asyncio>=1.1.0",
 ]
 
 # Note: dev dependencies are managed through [dependency-groups]
@@ -43,12 +44,9 @@ Repository = "https://github.com/your-org/pr-review-assistant"
 Documentation = "https://pr-review-assistant.readthedocs.io"
 Issues = "https://github.com/your-org/pr-review-assistant/issues"
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
 
-[tool.hatch.build.targets.wheel]
-packages = ["agents", "tools", "graph"]
+# Build settings optimized for development
+# This prevents unnecessary wheel building during uv sync
 
 # Note: dev dependencies are managed through [project.optional-dependencies]
 
@@ -73,6 +71,9 @@ show_error_codes = true
 show_column_numbers = true
 show_error_context = true
 pretty = true
+# Disable package name validation for development
+explicit_package_bases = true
+namespace_packages = true
 
 [[tool.mypy.overrides]]
 module = [
@@ -88,6 +89,8 @@ module = [
     "tests.*",
 ]
 disallow_untyped_decorators = false
+disallow_untyped_defs = false
+# Allow untyped defs in tests for compatibility with test files
 
 [tool.ruff]
 target-version = "py312"
@@ -133,6 +136,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
+    "asyncio: marks tests as async (using pytest-asyncio)",
 ]
 
 [tool.coverage.run]

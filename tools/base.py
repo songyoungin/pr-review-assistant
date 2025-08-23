@@ -5,6 +5,7 @@ This module defines the common interface that all tools in the PR Review Assista
 All tools inherit from this base class to ensure consistent behavior and error handling.
 """
 
+import asyncio
 import json
 import uuid
 from abc import ABC, abstractmethod
@@ -61,13 +62,15 @@ class ToolMetrics:
 
 @dataclass
 class ToolEvidence:
-    """Evidence structure supporting tool results."""
+    """Evidence structure supporting tool results with rule compliance (NFR-2, NFR-5)."""
 
     file_path: str
     content: str  # The actual evidence content
     evidence_type: str  # 'code', 'doc', 'config', 'log', etc.
     line_number: int | None = None
     description: str | None = None  # Human-readable explanation
+    rule_id: str | None = None  # Rule identifier for NFR-5 compliance
+    rule_version: str | None = None  # Rule version for traceability
 
     def to_dict(self) -> dict[str, Any]:
         """딕셔너리로 변환."""
@@ -223,7 +226,7 @@ class BaseTool[InputT, OutputT](ABC):
         logger.error(f"Error code: {error_code.value}")
         logger.error(f"Error message: {str(error)}")
 
-    def run(self, input_data: InputT) -> ToolResult[OutputT]:
+    async def run(self, input_data: InputT) -> ToolResult[OutputT]:
         """
         Wrapper method for tool execution.
 
@@ -241,6 +244,10 @@ class BaseTool[InputT, OutputT](ABC):
 
             # Execute the actual tool
             result = self.execute(input_data)
+
+            # If the result is a coroutine, await it
+            if asyncio.iscoroutine(result):
+                result = await result
 
             # Add metrics if not present
             if not result.metrics:

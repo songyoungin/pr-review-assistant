@@ -79,7 +79,7 @@ class RequestEnvelope:
 @dataclass
 class Evidence:
     """
-    Evidence structure for supporting agent claims and findings.
+    Evidence structure for supporting agent claims and findings with rule compliance (NFR-2, NFR-5).
 
     All agent outputs must include evidence with specific file:line references.
     """
@@ -89,6 +89,8 @@ class Evidence:
     evidence_type: str  # 'code', 'doc', 'config', 'log', etc.
     line_number: int | None = None
     description: str | None = None  # Human-readable explanation
+    rule_id: str | None = None  # Rule identifier for NFR-5 compliance
+    rule_version: str | None = None  # Rule version for traceability
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""

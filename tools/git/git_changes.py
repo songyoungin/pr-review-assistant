@@ -19,7 +19,7 @@ from git import Diff, Repo
 from git.exc import GitCommandError, InvalidGitRepositoryError
 from loguru import logger
 
-from ..base import BaseTool, ToolErrorCode, ToolEvidence, ToolResult
+from tools.base import BaseTool, ToolErrorCode, ToolEvidence, ToolResult
 
 
 @dataclass

@@ -1,9 +1,7 @@
 ---
-description:
-globs:
+description: 데이터 모델 설계에 대한 원칙
 alwaysApply: false
 ---
-
 # 데이터 모델 설계 원칙
 
 ## 핵심 원칙
