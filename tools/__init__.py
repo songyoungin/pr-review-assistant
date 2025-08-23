@@ -18,6 +18,7 @@ from .base import (
 from .code_analysis.python_ast import PythonASTAnalyzer
 from .comparison.code_doc_matcher import CodeDocMatcher
 from .git.git_changes import GitChangeDetector
+from .schema_analysis.schema_analyzer import SchemaAnalyzer
 
 __all__ = [
     # Base classes and types
@@ -31,4 +32,5 @@ __all__ = [
     "GitChangeDetector",
     "PythonASTAnalyzer",
     "CodeDocMatcher",
+    "SchemaAnalyzer",
 ]
