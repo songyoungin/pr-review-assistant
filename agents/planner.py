@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from dataclasses import asdict
 from importlib import import_module
 from pathlib import Path
@@ -11,6 +12,8 @@ from loguru import logger
 
 # using loguru's logger
 from tools.comparison.code_doc_matcher import CodeDocMatcher
+from tools.llm.base import LLMConfig
+from tools.llm.tool import create_llm_tool
 from tools.schema_analysis.schema_analyzer import (
     SchemaAnalysisInput,
     SchemaAnalysisOutput,
@@ -203,7 +206,32 @@ class MVPOrchestrator:
             # Attempt to import the real CodeReviewer agent
             mod = import_module("agents.reviewer.reviewer")
             if hasattr(mod, "CodeReviewer"):
-                cr = mod.CodeReviewer()
+                # Choose provider based on environment. If no API key is
+                # available for a non-mock provider, fall back to mock.
+                provider_type = os.getenv("LLM_PROVIDER", "mock")
+                api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
+                if provider_type != "mock" and not api_key:
+                    logger.warning(
+                        "LLM provider '%s' requested but no API key found; using mock instead",
+                        provider_type,
+                    )
+                    provider_type = "mock"
+
+                cfg = LLMConfig(
+                    api_key=api_key or "test-key",
+                    model=os.getenv("LLM_MODEL", "mock-model"),
+                )
+                try:
+                    llm_tool = create_llm_tool(cfg, provider_type)
+                except Exception as e:
+                    logger.exception(
+                        "Failed to create LLM tool, falling back to mock: %s", e
+                    )
+                    llm_tool = create_llm_tool(
+                        LLMConfig(api_key="test-key", model="mock-model"), "mock"
+                    )
+
+                cr = mod.CodeReviewer(llm_tool=llm_tool)
                 result = cr.review(
                     diff_path=state.diff.unified_patch_path,
                     files_path=state.diff.changed_files_path,
