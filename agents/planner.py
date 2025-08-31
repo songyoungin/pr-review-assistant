@@ -290,9 +290,12 @@ class MVPOrchestrator:
                 # available for a non-mock provider, fall back to mock.
                 provider_type = os.getenv("LLM_PROVIDER", "mock")
                 api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
+                logger.info("API key: %s", api_key)
+                logger.info("Provider type: %s", provider_type)
+
                 if provider_type != "mock" and not api_key:
                     logger.warning(
-                        "LLM provider '%s' requested but no API key found; using mock instead",
+                        "LLM provider %s requested but no API key found; using mock instead",
                         provider_type,
                     )
                     provider_type = "mock"
