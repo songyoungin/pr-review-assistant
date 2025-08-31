@@ -131,11 +131,20 @@ class MVPOrchestrator:
             ),
         }
 
-        state.outputs.final_report = json.dumps(final_report, indent=2, default=str)
+        # Preserve non-ASCII characters (e.g., Korean) in JSON output
+        state.outputs.final_report = json.dumps(
+            final_report, indent=2, default=str, ensure_ascii=False
+        )
         state.outputs.summary = final_report["summary"]
-        state.outputs.code_review = json.dumps(code_review, indent=2, default=str)
-        state.outputs.docs = json.dumps(docs_consistency, indent=2, default=str)
-        state.outputs.schema = json.dumps(schema_analysis, indent=2, default=str)
+        state.outputs.code_review = json.dumps(
+            code_review, indent=2, default=str, ensure_ascii=False
+        )
+        state.outputs.docs = json.dumps(
+            docs_consistency, indent=2, default=str, ensure_ascii=False
+        )
+        state.outputs.schema = json.dumps(
+            schema_analysis, indent=2, default=str, ensure_ascii=False
+        )
 
         return state
 
