@@ -81,32 +81,6 @@ jobs:
           LLM_PROVIDER: openai
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           LLM_MODEL: gpt-5-nano
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Ensure local branches for base and head exist so git diff base..head works
-          cd target-repo
-          git fetch origin --quiet
-
-          if ! git rev-parse --verify "${{ env.BASE_REF }}" >/dev/null 2>&1; then
-            if git rev-parse --verify "origin/${{ env.BASE_REF }}" >/dev/null 2>&1; then
-              git checkout -B "${{ env.BASE_REF }}" "origin/${{ env.BASE_REF }}"
-            else
-              echo "Warning: origin/${{ env.BASE_REF }} not found"
-            fi
-          fi
-
-          if ! git rev-parse --verify "${{ env.HEAD_REF }}" >/dev/null 2>&1; then
-            if git rev-parse --verify "origin/${{ env.HEAD_REF }}" >/dev/null 2>&1; then
-              git checkout -B "${{ env.HEAD_REF }}" "origin/${{ env.HEAD_REF }}"
-            else
-              # Try fetching PR head into a local branch named as HEAD_REF
-              git fetch origin "refs/pull/${{ env.PR_NUMBER }}/head:${{ env.HEAD_REF }}" || true
-              if git rev-parse --verify "${{ env.HEAD_REF }}" >/dev/null 2>&1; then
-                git checkout -B "${{ env.HEAD_REF }}" "${{ env.HEAD_REF }}"
-              else
-                echo "Warning: head ref ${env.HEAD_REF} not found after fetch"
-              fi
-            fi
-          fi
-
-          cd ..
-          uv run python main.py --repo-path "$(pwd)/target-repo" --range "${{ env.BASE_REF }}" "${{ env.HEAD_REF }}"
+          uv run python main.py --repo-path "$(pwd)/target-repo" --range "${{ env.BASE_REF }}" "${{ env.HEAD_REF }}" --pr-url "${{ inputs.pr_url }}"
