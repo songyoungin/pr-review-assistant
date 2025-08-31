@@ -111,28 +111,28 @@ class LLMProvider(ABC):
         self.provider_name = self.__class__.__name__
 
     @abstractmethod
-    async def generate(self, messages: list[LLMMessage], **kwargs: Any) -> LLMResponse:
+    def generate(self, messages: list[LLMMessage], **kwargs: Any) -> Any:
         """
-        Generate text using LLM.
+        Generate text using LLM. Implementations may be synchronous or
+        asynchronous (returning an awaitable). The caller is responsible
+        for handling both cases.
 
         Args:
             messages: List of conversation messages
             **kwargs: Additional parameters
 
         Returns:
-            LLM response
+            Either an LLMResponse or an awaitable that resolves to LLMResponse
         """
-        pass
 
     @abstractmethod
-    async def validate_connection(self) -> bool:
+    def validate_connection(self) -> Any:
         """
-        Validate provider connection.
+        Validate provider connection. Implementations may be async or sync.
 
         Returns:
-            True if connection is valid
+            True if connection is valid (or an awaitable resolving to bool)
         """
-        pass
 
     def estimate_tokens(self, text: str) -> int:
         """

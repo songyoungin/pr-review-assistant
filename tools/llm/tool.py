@@ -6,6 +6,7 @@ LLM 통합 도구 - NFR-2, NFR-5 준수
 """
 
 import asyncio
+import inspect
 import json
 import re
 from dataclasses import asdict, dataclass
@@ -88,12 +89,18 @@ class LLMTool(BaseTool[LLMAnalysisRequest, LLMAnalysisResult]):
                 LLMMessage(role="user", content=user_prompt),
             ]
 
-            # Call LLM provider (synchronously)
-            llm_response: Any = self.provider.generate(messages)
+            # Call provider.generate and handle both sync and async implementations.
+            provider_generate = getattr(self.provider, "generate", None)
+            if provider_generate is None:
+                raise RuntimeError("LLM provider does not implement generate()")
 
-            # If provider.generate returns a coroutine, run it to completion
-            if asyncio.iscoroutine(llm_response):
-                llm_response = asyncio.run(llm_response)
+            # If provider_generate is an async function, invoke it via
+            # asyncio.run immediately to avoid creating an un-awaited coroutine
+            # object that could leak if an exception occurs later.
+            if inspect.iscoroutinefunction(provider_generate):
+                llm_response = asyncio.run(provider_generate(messages))
+            else:
+                llm_response = provider_generate(messages)
 
             # Ensure the final object is typed as LLMResponse
             llm_response = cast(LLMResponse, llm_response)

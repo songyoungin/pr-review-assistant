@@ -12,10 +12,39 @@ def _load_env() -> None:
 
 
 def main() -> None:
+    """Entry point for running the MVP orchestrator pipeline.
+
+    This function loads environment variables, prints a short status
+    line and executes the MVP orchestrator end-to-end using a local
+    sample PR identifier. The final report is printed and written to
+    `final_report.json` in the repository root.
+    """
+
     _load_env()
-    # Print short confirmation for manual runs
+
     provider = os.getenv("LLM_PROVIDER", "mock")
     print(f"PR Review Assistant starting (LLM_PROVIDER={provider})")
+
+    # Run the MVP orchestrator pipeline
+    try:
+        # Import here to keep startup lightweight when main isn't used
+        from agents.planner import MVPOrchestrator
+
+        async def _run() -> None:
+            orch = MVPOrchestrator()
+            state = await orch.initialize_workflow("local-sample-pr")
+            state = await orch.run_mvp_pipeline(state)
+
+            # Print and persist final report
+            final = state.outputs.final_report or "{}"
+            print(final)
+            Path("final_report.json").write_text(final, encoding="utf-8")
+
+        import asyncio
+
+        asyncio.run(_run())
+    except Exception as e:
+        print(f"Failed to run MVP orchestrator: {e}")
 
 
 if __name__ == "__main__":

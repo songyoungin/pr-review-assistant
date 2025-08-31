@@ -234,8 +234,12 @@ class MockProvider(LLMProvider):
         self.mock_responses = mock_responses or ["Mock response for testing"]
         self.response_index = 0
 
-    async def generate(self, messages: list[LLMMessage], **kwargs: Any) -> LLMResponse:
-        """Generate mock response."""
+    def generate(self, messages: list[LLMMessage], **kwargs: Any) -> LLMResponse:
+        """Generate mock response (synchronous).
+
+        Returns an LLMResponse synchronously to simplify caller handling in
+        tests and local runs.
+        """
 
         # Estimate token count
         prompt_text = " ".join([msg.content for msg in messages])
