@@ -1,0 +1,81 @@
+name: Request PR Review
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_url:
+        description: 'PR URL to post to'
+        required: true
+
+jobs:
+  integration:
+    name: Integration / request PR review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Cache uv and virtualenv
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+            .venv
+          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Sync dependencies (all group)
+        run: uv sync --group all
+
+      - name: Parse PR URL
+        env:
+          PR_URL: ${{ inputs.pr_url }}
+        run: |
+          owner=$(echo "$PR_URL" | sed -E 's#.*/([^/]+)/([^/]+)/pull/([0-9]+).*#\1#')
+          repo=$(echo "$PR_URL" | sed -E 's#.*/([^/]+)/([^/]+)/pull/([0-9]+).*#\2#')
+          number=$(echo "$PR_URL" | sed -E 's#.*/([^/]+)/([^/]+)/pull/([0-9]+).*#\3#')
+          echo "OWNER=$owner" >> $GITHUB_ENV
+          echo "REPO=$repo" >> $GITHUB_ENV
+          echo "PR_NUMBER=$number" >> $GITHUB_ENV
+
+      - name: Clone target repository
+        run: |
+          git clone "https://github.com/${{ env.OWNER }}/${{ env.REPO }}.git" target-repo
+
+      - name: Fetch PR metadata
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ env.OWNER }}
+          REPO: ${{ env.REPO }}
+          PR_NUMBER: ${{ env.PR_NUMBER }}
+        run: |
+          pr_json=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" "https://api.github.com/repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}")
+          base_ref=$(echo "$pr_json" | jq -r .base.ref)
+          head_ref=$(echo "$pr_json" | jq -r .head.ref)
+          echo "BASE_REF=$base_ref" >> $GITHUB_ENV
+          echo "HEAD_REF=$head_ref" >> $GITHUB_ENV
+
+      - name: Checkout head ref
+        run: |
+          cd target-repo
+          git fetch origin --quiet
+          if git rev-parse --verify "origin/${{ env.HEAD_REF }}" >/dev/null 2>&1; then
+            git checkout -b pr-${{ env.PR_NUMBER }} origin/${{ env.HEAD_REF }}
+          else
+            git fetch origin "refs/pull/${{ env.PR_NUMBER }}/head:pr-${{ env.PR_NUMBER }}"
+            git checkout pr-${{ env.PR_NUMBER }}
+          fi
+
+      - name: Run main.py
+        run: |
+          uv run python main.py --repo-path "$(pwd)/target-repo" --range "${{ env.BASE_REF }}" "${{ env.HEAD_REF }}"

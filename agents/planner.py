@@ -146,7 +146,79 @@ class MVPOrchestrator:
             schema_analysis, indent=2, default=str, ensure_ascii=False
         )
 
+        # Attempt to post final report to PR if running in an environment with
+        # a configured GitHub token and PR metadata is available.
+        try:
+            github_token = os.getenv("GITHUB_TOKEN")
+            if github_token and state.pr and state.repo:
+                # Defer network I/O to a thread to avoid blocking the event loop
+                await asyncio.to_thread(self._post_report_to_pr, state, github_token)
+        except Exception as e:
+            logger.exception("Failed to post final report to PR: %s", e)
+
         return state
+
+    def _post_report_to_pr(self, state: OrchestratorState, github_token: str) -> None:
+        """Synchronous helper to post the final report to the PR using GitHubPoster.
+
+        This method is executed in a background thread to keep the main
+        orchestrator event loop responsive.
+        """
+        try:
+            # Lazy import to avoid adding requests dependency to import-time
+            from tools.git.provider_github import GitHubPoster, parse_github_pr_url
+
+            # Determine owner/repo/number. Prefer explicit PR URL parsing; fall
+            # back to using repo.url + pr.number when available.
+            owner = None
+            repo = None
+            number = None
+
+            if state.pr and state.pr.url:
+                try:
+                    owner, repo, number = parse_github_pr_url(state.pr.url)
+                except ValueError:
+                    logger.debug(
+                        "Could not parse PR URL, will try repo URL + PR number"
+                    )
+
+            if (owner is None or repo is None) and state.repo and state.pr:
+                # Attempt to parse owner/repo from repo.url and number from pr.number
+                try:
+                    owner, repo, _ = parse_github_pr_url(state.repo.url + "/pull/0")
+                except Exception:
+                    # Last resort: attempt simple split of repo.url
+                    url = state.repo.url or ""
+                    parts = url.rstrip("/").split("/")
+                    if len(parts) >= 2:
+                        owner, repo = parts[-2], parts[-1].replace(".git", "")
+
+            if state.pr:
+                number = number or getattr(state.pr, "number", None)
+
+            if not (owner and repo and number):
+                logger.warning(
+                    "Insufficient PR metadata to post report: %s %s",
+                    state.repo,
+                    state.pr,
+                )
+                return
+
+            poster = GitHubPoster(token=github_token)
+            comment_body = state.outputs.final_report or ""
+            # If the report is too large, only post the summary
+            if len(comment_body) > 60000:
+                comment_body = state.outputs.summary or "Large report - see artifacts"
+
+            resp = poster.post_comment(owner, repo, int(number), comment_body)
+            # Record evidence of posting in outputs
+            posted = {"posted": True, "response": resp}
+            try:
+                state.outputs.final_report_post = json.dumps(posted, ensure_ascii=False)
+            except Exception:
+                state.outputs.final_report_post = str(posted)
+        except Exception as e:
+            logger.exception("Exception while posting report to PR: %s", e)
 
     def _generate_tldr(
         self,

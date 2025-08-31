@@ -227,6 +227,7 @@ class AgentOutputs:
     docs: str | None = None  # Path to documentation analysis output
     schema: str | None = None  # Path to schema analysis output
     final_report: str | None = None  # Path to final report
+    final_report_post: str | None = None  # Metadata about posting final report to PR
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
