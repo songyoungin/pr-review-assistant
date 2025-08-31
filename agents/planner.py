@@ -199,6 +199,23 @@ class MVPOrchestrator:
         }
 
     async def _invoke_code_reviewer(self, state: OrchestratorState) -> dict[str, Any]:
+        try:
+            # Attempt to import the real CodeReviewer agent
+            mod = import_module("agents.reviewer.reviewer")
+            if hasattr(mod, "CodeReviewer"):
+                cr = mod.CodeReviewer()
+                result = cr.review(
+                    diff_path=state.diff.unified_patch_path,
+                    files_path=state.diff.changed_files_path,
+                    ruleset_version="1.0.0",
+                    severity_threshold="low",
+                )
+                if isinstance(result, dict):
+                    return result
+        except Exception as e:
+            logger.exception("CodeReviewer failed: %s", e)
+
+        # Fallback sample
         return {
             "findings": [],
             "coverage_hints": [],
