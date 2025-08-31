@@ -160,7 +160,6 @@ class MVPOrchestrator:
             tldr = diff_summary.get("tldr")
             if tldr:
                 parts.append(tldr)
-        parts.append("MVP 엔드-투-엔드 파이프라인 실행 완료")
         return " | ".join(parts)
 
     async def _invoke_diff_summarizer(self, state: OrchestratorState) -> dict[str, Any]:
