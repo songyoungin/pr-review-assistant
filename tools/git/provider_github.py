@@ -81,7 +81,7 @@ class GitHubPoster:
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
             try:
-                logger.debug("Posting PR comment attempt %s to %s", attempt, url)
+                logger.debug(f"Posting PR comment attempt {attempt} to {url}")
                 resp = requests.post(
                     url, headers=headers, json=payload, timeout=timeout
                 )

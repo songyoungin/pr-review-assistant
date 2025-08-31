@@ -1,10 +1,14 @@
 import argparse
 import json
 import os
+import re
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 from dotenv import load_dotenv
+from git import GitCommandError, Repo
 from loguru import logger
 
 
@@ -156,30 +160,80 @@ def main(argv: list[str] | None = None) -> None:
         help="PR URL to initialize the workflow with (optional)",
     )
     parser.add_argument(
-        "--repo-path", default=".", help="Path to git repository (default: current dir)"
+        "--repo-path", default=None, help="Path to git repository (default: None)"
     )
     args = parser.parse_args(argv)
 
     provider = os.getenv("LLM_PROVIDER", "mock")
-    logger.info("PR Review Assistant starting (LLM_PROVIDER={})", provider)
+    logger.info(f"PR Review Assistant starting (LLM_PROVIDER={provider})")
 
+    temp_clone_dir: str | None = None
     try:
+        # If a PR URL was provided but repo-path doesn't look like a git repo,
+        # clone the target repo into a temporary directory and use that path.
+        repo_path_to_use = args.repo_path
+        if args.pr_url and (
+            not args.repo_path or not Path(args.repo_path).joinpath(".git").exists()
+        ):
+            m = re.search(r"github\.com/([^/]+)/([^/]+)/pull/", args.pr_url)
+            if m:
+                owner, repo = m.group(1), m.group(2)
+                clone_url = f"https://github.com/{owner}/{repo}.git"
+                temp_clone_dir = tempfile.mkdtemp(prefix="pr-review-")
+                logger.info(f"Cloning {clone_url} -> {temp_clone_dir}")
+                try:
+                    Repo.clone_from(clone_url, temp_clone_dir)
+                    repo_path_to_use = temp_clone_dir
+                except GitCommandError as e:
+                    logger.error(f"Failed to clone {clone_url}: {e}")
+                    raise
+            else:
+                logger.warning(f"Could not parse owner/repo from pr-url: {args.pr_url}")
+
         # Generate input files if requested
         if args.commit:
-            logger.info("Generating diff/files from commit: {}", args.commit)
-            _generate_diff_and_files_from_commit(args.repo_path, args.commit)
+            logger.info(f"Generating diff/files from commit: {args.commit}")
+            _generate_diff_and_files_from_commit(repo_path_to_use, args.commit)
         elif args.range:
             base, head = args.range
-            logger.info("Generating diff/files from range: %s..%s", base, head)
-            _generate_diff_and_files_from_range(args.repo_path, base, head)
+            logger.info(f"Generating diff/files from range: {base}..{head}")
+            _generate_diff_and_files_from_range(
+                repo_path_to_use, base, head, args.pr_url
+            )
+        elif args.pr_url:
+            # If only a PR URL is provided (no --commit/--range), try to generate
+            # diff/files using the PR head by fetching refs/pull/<num>/head.
+            # Use DEFAULT_PR_BASE env var if set, otherwise fall back to 'main'.
+            default_base = os.getenv("DEFAULT_PR_BASE", "main")
+            logger.info(
+                f"Generating diff/files from pr-url only (base={default_base}). "
+                "If the repo uses a different default branch, provide --range or set DEFAULT_PR_BASE env."
+            )
+            try:
+                _generate_diff_and_files_from_range(
+                    repo_path_to_use, default_base, "HEAD", args.pr_url
+                )
+            except Exception as e:
+                logger.warning(f"Failed to generate diff/files from pr-url: {e}")
 
         # Import here to keep startup lightweight when main isn't used
         from agents.planner import MVPOrchestrator
 
         async def _run() -> None:
             orch = MVPOrchestrator()
-            pr_url = args.pr_url or "local-sample-pr"
-            state = await orch.initialize_workflow(pr_url)
+
+            # Initialize workflow using the original PR url when available so
+            # that PR metadata (owner/repo/number) is preserved for posting.
+            state = await orch.initialize_workflow(args.pr_url or "local-sample-pr")
+
+            # If we generated a local diff/files, override the diff paths on the
+            # state so agents read the created files while keeping PR metadata.
+            local_diff_path = Path("local-sample-pr.diff")
+            if local_diff_path.exists() and local_diff_path.stat().st_size > 0:
+                state.diff.unified_patch_path = str(local_diff_path)
+                local_files_path = Path("local-sample-pr.files")
+                if local_files_path.exists():
+                    state.diff.changed_files_path = str(local_files_path)
             state = await orch.run_mvp_pipeline(state)
 
             # Print and persist final report
@@ -189,8 +243,6 @@ def main(argv: list[str] | None = None) -> None:
             # Persist posting metadata if available (from orchestrator)
             post_meta = getattr(state.outputs, "final_report_post", None)
             if post_meta:
-                logger.info("FINAL_REPORT_POST:")
-                logger.info(str(post_meta))
                 try:
                     # Try to interpret as JSON and save as .json
                     parsed = json.loads(post_meta)
@@ -208,8 +260,15 @@ def main(argv: list[str] | None = None) -> None:
 
         asyncio.run(_run())
     except Exception as e:
-        logger.exception("Failed to run MVP orchestrator: %s", e)
+        logger.exception(f"Failed to run MVP orchestrator: {e}")
         sys.exit(1)
+    finally:
+        if temp_clone_dir:
+            try:
+                shutil.rmtree(temp_clone_dir)
+                logger.info(f"Removed temp clone dir {temp_clone_dir}")
+            except Exception as e:
+                logger.warning(f"Failed to remove temp clone dir {temp_clone_dir}: {e}")
 
 
 if __name__ == "__main__":

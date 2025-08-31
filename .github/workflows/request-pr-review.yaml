@@ -83,4 +83,4 @@ jobs:
           LLM_MODEL: gpt-5-nano
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          uv run python main.py --repo-path "$(pwd)/target-repo" --range "${{ env.BASE_REF }}" "${{ env.HEAD_REF }}" --pr-url "${{ inputs.pr_url }}"
+          uv run python main.py --pr-url "${{ inputs.pr_url }}"
