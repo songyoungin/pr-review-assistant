@@ -100,21 +100,18 @@ class GitHubPoster:
                 # Authentication/authorization errors should not be retried
                 if resp.status_code in (401, 403):
                     logger.error(
-                        "Auth error posting comment: %s %s", resp.status_code, resp.text
+                        f"Auth error posting comment: {resp.status_code} {resp.text}"
                     )
                     raise RuntimeError(
                         f"Auth error posting comment: {resp.status_code}"
                     )
 
                 logger.warning(
-                    "Non-ok response posting comment (attempt %s): %s %s",
-                    attempt,
-                    resp.status_code,
-                    resp.text,
+                    f"Non-ok response posting comment (attempt {attempt}): {resp.status_code} {resp.text}"
                 )
             except requests.RequestException as exc:
                 logger.warning(
-                    "RequestException posting comment (attempt %s): %s", attempt, exc
+                    f"RequestException posting comment (attempt {attempt}): {exc}"
                 )
 
             # Backoff before next attempt if any
