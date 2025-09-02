@@ -74,7 +74,10 @@ source .venv/bin/activate  # Linux/Mac
 .venv\Scripts\activate  # Windows
 
 # 의존성 설치
-pip install -r requirements.txt
+# uv 사용 권장
+python -m pip install -U pip
+python -m pip install uv
+uv sync --yes
 ```
 
 ### 사용법

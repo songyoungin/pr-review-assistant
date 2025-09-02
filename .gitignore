@@ -195,5 +195,6 @@ cython_debug/
 
 # Final report
 final_report.json
+final_report_post.json
 local-sample-pr.diff
 local-sample-pr.files

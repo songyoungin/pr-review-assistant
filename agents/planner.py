@@ -158,6 +158,129 @@ class MVPOrchestrator:
 
         return state
 
+    def _format_report_markdown(
+        self, final_report: dict[str, Any] | str, max_evidence: int = 5
+    ) -> str:
+        """Format the final report (dict or JSON string) into a readable Markdown string.
+
+        The method is defensive: if parsing fails it will return the original
+        string so callers can fall back to posting the raw report.
+        """
+        # Normalize input to a dict for easier access. If parsing fails,
+        # return the original string so callers can still post the raw report.
+        final: dict[str, Any]
+        if isinstance(final_report, dict):
+            final = final_report
+        elif isinstance(final_report, str):
+            try:
+                parsed = json.loads(final_report)
+            except Exception:
+                return final_report
+            if not isinstance(parsed, dict):
+                return str(parsed)
+            final = parsed
+        # Note: signature restricts final_report to dict | str; no other branch expected.
+
+        diff_summary = final.get("diff_summary", {})
+        parts: list[str] = []
+
+        # TL;DR / summary
+        parts.append("## TL;DR")
+        summary = final.get("summary")
+        if summary:
+            parts.append(summary)
+        parts.append("")
+
+        # Highlights
+        parts.append("## Highlights")
+        highlights = diff_summary.get("highlights") or []
+        if highlights:
+            for h in highlights:
+                parts.append(f"- `{h}`")
+        else:
+            parts.append("- None")
+        parts.append("")
+
+        # Risks
+        parts.append("## Key Risks")
+        risks = diff_summary.get("risks") or []
+        if risks:
+            for r in risks:
+                desc = r.get("description", "")
+                level = (r.get("level") or "").upper()
+                fp = r.get("file_path")
+                lr = r.get("line_range") or {}
+                start = lr.get("start")
+                end = lr.get("end")
+                conf = r.get("confidence")
+                loc = (
+                    f" — `{fp}` (L{start}–{end})"
+                    if fp and start is not None and end is not None
+                    else (f" — `{fp}`" if fp else "")
+                )
+                conf_str = (
+                    f" · Confidence: {int(conf * 100)}%"
+                    if isinstance(conf, int | float)
+                    else ""
+                )
+                parts.append(f"- **[{level}]** {desc}{loc}{conf_str}")
+        else:
+            parts.append("- None")
+        parts.append("")
+
+        # Deployment / compatibility
+        parts.append("## Deployment & Compatibility Impact")
+        di = diff_summary.get("deployment_impact")
+        ci = diff_summary.get("compatibility_impact")
+        if di:
+            parts.append(f"- Deployment impact: **{di}**")
+        if ci:
+            parts.append(f"- Compatibility impact: **{ci}**")
+        parts.append("")
+
+        # Evidence
+        parts.append("## Evidence (top items)")
+        evidence = diff_summary.get("evidence") or []
+        if evidence:
+            for ev in evidence[:max_evidence]:
+                fp = ev.get("file_path") or ev.get("target") or "<unknown>"
+                desc = ev.get("description", "")
+                lr = ev.get("line_range") or {}
+                s = lr.get("start")
+                e = lr.get("end")
+                lineinfo = (
+                    f" (lines {s}–{e})" if s is not None and e is not None else ""
+                )
+                parts.append(f"- `{fp}`: {desc}{lineinfo}")
+        else:
+            parts.append("- None")
+        parts.append("")
+
+        # Schema analysis short summary
+        schema = final.get("schema_analysis") or {}
+        ddl_changes = schema.get("ddl_changes") or []
+        if ddl_changes:
+            parts.append("## Schema Changes Summary")
+            for change in ddl_changes:
+                ctype = change.get("change_type") or change.get("type") or "change"
+                target = (
+                    change.get("target_object") or change.get("table") or "<unknown>"
+                )
+                desc = change.get("description") or change.get("sql_statement") or ""
+                parts.append(f"- {ctype}: {target} — {desc}")
+            parts.append("")
+
+        # Recommendations
+        parts.append("## Recommended Actions (short-term)")
+        recs = final.get("docs_consistency", {}).get("recommendations") or []
+        if recs:
+            for r in recs:
+                parts.append(f"- {r}")
+        else:
+            parts.append("- Review required")
+
+        return "\n".join(parts)
+
     def _post_report_to_pr(self, state: OrchestratorState, github_token: str) -> None:
         """Synchronous helper to post the final report to the PR using GitHubPoster.
 
@@ -205,10 +328,14 @@ class MVPOrchestrator:
                 return
 
             poster = GitHubPoster(token=github_token)
-            comment_body = state.outputs.final_report or ""
-            # If the report is too large, only post the summary
-            if len(comment_body) > 60000:
+            # Prefer a human-readable Markdown rendering of the final report.
+            raw_report = state.outputs.final_report or state.outputs.summary or "{}"
+            comment_md = self._format_report_markdown(raw_report)
+            # If the formatted markdown is too large, fall back to the short summary
+            if isinstance(comment_md, str) and len(comment_md) > 60000:
                 comment_body = state.outputs.summary or "Large report - see artifacts"
+            else:
+                comment_body = comment_md
 
             resp = poster.post_comment(owner, repo, int(number), comment_body)
             # Record evidence of posting in outputs
@@ -290,9 +417,12 @@ class MVPOrchestrator:
                 # available for a non-mock provider, fall back to mock.
                 provider_type = os.getenv("LLM_PROVIDER", "mock")
                 api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
+                logger.info(f"API key: {api_key}")
+                logger.info(f"Provider type: {provider_type}")
+
                 if provider_type != "mock" and not api_key:
                     logger.warning(
-                        "LLM provider '%s' requested but no API key found; using mock instead",
+                        f"LLM provider {provider_type} requested but no API key found; using mock instead",
                         provider_type,
                     )
                     provider_type = "mock"
