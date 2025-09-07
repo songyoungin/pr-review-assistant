@@ -80,7 +80,7 @@ jobs:
         env:
           LLM_PROVIDER: openai
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          LLM_MODEL: gpt-5-nano
+          LLM_MODEL: gpt-5
           GITHUB_TOKEN: ${{ secrets.PR_ASSISTANT_GITHUB_TOKEN }}
         run: |
           uv run python main.py --pr-url "${{ inputs.pr_url }}"
